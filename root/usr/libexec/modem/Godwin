@@ -1,0 +1,347 @@
+#!/bin/sh
+source /usr/share/libubox/jshn.sh 
+
+lte_bw() {
+	BW=$(echo $1 | grep -o "[0-5]\{1\}")
+	case $BW in
+		"0")
+			BW="1.4" ;;
+		"1")
+			BW="3" ;;
+		"2"|"3"|"4"|"5")
+			BW=$((($(echo $BW) - 1) * 5)) ;;
+	esac
+    echo "$BW MHz"
+}
+
+#查询信息强度
+#理想状态下可以获取信号强度、信号质量、信号百分比
+All_CSQ()
+{   
+    
+    Debug "All_CSQ"
+	#信号
+	CSQ=$(gl_modem $ATPORT "AT+CSQ")
+    CSQ=$(echo $CSQ | grep -i -o "+CSQ: [0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+	if [ "$CSQ" = "99" ]; then
+		json_init
+        json_add_int CSQ 0
+        json_add_string CSQ_PER "0%"
+        json_add_string CSQ_RSSI "0 dBm"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	else
+		CSQ_PER=$(($CSQ * 100/31))"%"
+		CSQ_RSSI=$((2 * CSQ - 113))" dBm"
+        json_init
+        json_add_int CSQ "$CSQ"
+        json_add_string CSQ_PER "$CSQ_PER"
+        json_add_string CSQ_RSSI "$CSQ_RSSI"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	fi
+}
+
+#获取sim信息，理想状态下可以获取是否插入、imsi、iccid
+Vendor_SIMINFO()
+{
+    Debug "Vendor_SIMINFO"
+    ATI=$(gl_modem ${ATPORT} "ATI")
+    READY=$(gl_modem $ATPORT "AT+CPIN?" | grep -o "+CPIN: READY" |wc -l)
+    IMEI=$(gl_modem $ATPORT "AT+CGSN" | grep -o "[0-9]\{15\}")
+    json_init
+    json_add_string IMEI "$IMEI"
+    if [ "$READY" = "1" ]; then
+        # 获取IMSI
+        IMSI=$( gl_modem $ATPORT "AT+CIMI"  | grep -o "[0-9]\{15\}"  )
+	    # 获取ICCID
+	    ICCID=$( gl_modem $ATPORT "AT+ICCID" | sed -n '3p' | awk -F ': ' '{print$2}' )
+        Phone=$( gl_modem $ATPORT "AT+CNUM"  | grep "+CNUM:" |grep -o "[0-9]\{11,\}"  )
+        json_add_string SIM_READY "Yes"
+        json_add_string IMSI "$IMSI"
+        json_add_string ICCID "$ICCID"
+        json_add_string Phone "$Phone"
+        
+    else
+        json_add_string SIM_READY "No"
+    fi
+    json_close_object
+    SIM_INFO=`json_dump`
+
+}
+
+Vendor_ModuleInfo(){
+    gl_modem $ATPORT "ATI" > /tmp/ati_${cfg}
+    Temperature=$(gl_modem $ATPORT "AT+TEMP" | grep '+TEMP:' |cut -d: -f2)
+    IMEI=$(gl_modem $ATPORT "AT+CGSN" | grep -o "[0-9]\{15\}")
+    Model=$( cat /tmp/ati_${cfg}  | sed -n 4p )
+    Manufacturer=$( cat /tmp/ati_${cfg}  | sed -n 3p )
+    Revision=$( cat /tmp/ati_${cfg}  | grep 'Revision:' |cut -d: -f2 )
+    json_init
+    json_add_string Model "$Model"
+    json_add_string Manufacturer Godwin
+    json_add_string IMEI "$IMEI"
+    json_add_string Revision "$Revision"
+    json_add_string Temperature "$Temperature"
+    json_close_object
+    MODULE_INFO=`json_dump`
+}
+
+
+
+#获取基站信息理想状态下可获取 RAT MCC MNC LAC CellID 龙尚模块还可获取PCI SINR RSRP RSRQ
+Vendor_Cellinfo()
+{
+    #cpos 3表示指定输出格式，0为长字符 1为短字符 2为数字
+    COPS0=$( gl_modem $ATPORT "AT+COPS=3,0;+COPS?")
+    #返回示例 +COPS: 0,0,"CHN-UNICOM",7
+    COPS1=$( gl_modem $ATPORT  "AT+COPS=3,2;+COPS?")
+    #返回示例 +COPS: 0,2,"46001",7
+    Carrier=$(echo $COPS0 | grep -o "+COPS: [01],0,.\+," | cut -d, -f3 | grep -o "[^\"]\+")
+    Carrier_MCC=$(echo $COPS1 | grep -o "+COPS: [01],2,.\+," | cut -d, -f3 | grep -o "[^\"]\+")
+    Carrier_MNC=$(echo $COPS1 | grep -o "+COPS: [01],2,.\+," | cut -d, -f3 | grep -o "[^\"]\+" | cut -c4-)
+    
+    REG_INFO=$( gl_modem $ATPORT "AT+CREG=2;+CREG?;+CREG=0")
+    LTE_REGINFO=$( gl_modem $ATPORT "AT+CEREG=2;+CEREG?;+CEREG=0")
+
+    LAC=$(echo $REG_INFO | grep "+CREG: " | cut -d, -f3|sed 's/\"//g')
+    CellID=$(echo $REG_INFO | grep "+CREG: " | cut -d, -f4|sed 's/\"//g')
+    TAC=$(echo $LTE_REGINFO | grep "+CEREG: " | cut -d, -f3)
+    CellID_LTE=$(echo $LTE_REGINFO | grep "+CEREG: " | cut -d, -f4|sed 's/\"//g')
+
+    #Quectel LTE Cellinfo
+    servingcell=$(gl_modem $ATPORT 'AT+CELLINFO ' | sed 's/\r/\n/g' | grep -i "+CELLINFO: ")
+    
+    #示例
+    #AT+QENG="servingcell"
+    #+CELLINFO:<earfcn>,<pci>,<rssnr>,<mcc>,<mnc>,<global_ci>,<tac>,<band>,<dl_bw>,<ul_bw>,[(<earfcn>,<pci>,<rsrp>,<rsrq>,<rssi >)][...] 
+#     AT+CELLINFO 
+# +CELLINFO:1650,476,17,460,01,AED515,183C,3,5,5,(1650,476,-874,-36,-630),(1650,396,- 
+# 1018,-124,-805),(1650,370,-1041,-146,-805),(1650,369,-1195,-200,-805),(1650,230,-1084,-18 
+# 7,-807),(1650,279,-1200,-200,-810),(1650,120,-1231,-200,-841)
+    QNWINFO=$(gl_modem $ATPORT "AT+QNWINFO" |grep -i "QNWINFO:")
+
+    RAT=$(echo $QNWINFO| sed 's/\r/\n/g'  | grep -i 'QNWINFO:' | cut -d: -f2|cut -d, -f1|sed 's/\"//g')
+    LBAND=$(echo $QNWINFO| sed 's/\r/\n/g'  | grep -i 'QNWINFO:' | cut -d: -f2|cut -d, -f3 |sed 's/\"//g')
+    CHANNEL=$(echo $QNWINFO| sed 's/\r/\n/g'  | grep -i 'QNWINFO:' | cut -d: -f2|cut -d, -f4 |sed 's/\"//g')
+    OPERATOR=$(echo $QNWINFO| sed 's/\r/\n/g'  | grep -i 'QNWINFO:' | cut -d: -f2|cut -d, -f2 |sed 's/\"//g')
+    PCI=$(echo $servingcell| cut -d, -f2)
+    TAC=$(echo $servingcell| cut -d, -f7)
+    RSSNR10=$(echo $servingcell| cut -d, -f3)
+    RSSNR=$(echo "scale=2;$RSSNR10/10" | bc)
+    RSRP10=$(echo $servingcell| cut -d, -f13)
+    RSRP=$(echo "scale=2;$RSRP10/10" | bc)
+    RSRQ10=$(echo $servingcell| cut -d, -f14)
+    RSRQ=$(echo "scale=2;$RSRQ10/10" | bc)
+    RSSI10=$(echo $servingcell| cut -d, -f15) |tr ')' ' '|awk '{print $1}'
+    RSSI=$(echo "scale=2;$RSSI10/10" | bc)
+
+
+    json_init
+    json_add_string Carrier "$Carrier"
+    json_add_string Carrier_MCC "$Carrier_MCC"
+    json_add_string Carrier_MNC "$Carrier_MNC"
+    json_add_string OPERATOR "$OPERATOR"
+    json_add_string RAT "$RAT"
+    json_add_string LAC "$LAC"
+    json_add_string CellID "$CellID"
+    json_add_string CHANNEL "$CHANNEL"
+    json_add_string TAC "$TAC"
+    json_add_string CellID_LTE "$CellID_LTE"
+    json_add_string LBAND "$LBAND"
+    json_add_string PCI "$PCI"
+    json_add_string SINR "$SINR"
+    json_add_string RSRP "$RSRP"
+    json_add_string RSRQ "$RSRQ"
+    json_add_string RSSI "$RSSI"
+    json_add_string RSSNR "$RSSNR"
+    json_close_object
+    CELL_INFO=`json_dump`
+
+}
+
+
+
+
+
+Vendor_Get_Lock_Band()
+{
+    modem_info=$(gl_modem $ATPORT 'AT+BANDCFG?')
+    current_rat=$(gl_modem $ATPORT 'AT^MODECONFIG?' | grep '\^MODECONFIG:' | cut -d, -f1 | cut -d: -f2 | grep -o "[0-9]\{1,2\}")
+    LowBand=$(echo "$modem_info" | grep '+BANDCFG:3,' | awk -F, '{print $2}' )
+    HighBand=$(echo "$modem_info" | grep '+BANDCFG:3,' | awk -F, '{print $3}' )
+    LOCK_BAND=$(convert2band $LowBand $HighBand)
+    if [ -z "$LOCK_BAND" ]; then
+        LOCK_BAND="Unknown"
+    fi
+    json_init
+    json_add_string current_rat "${current_rat}"
+    json_add_object AllowedBand
+    json_add_string "B01" "1"
+    json_add_string "B03" "3"
+    json_add_string "B05" "5"
+    json_add_string "B07" "7"
+    json_add_string "B08" "8"
+    json_add_string "B20" "20"
+    json_add_string "B34" "34"
+    json_add_string "B38" "38"
+    json_add_string "B39" "39"
+    json_add_string "B40" "40"
+    json_add_string "B41" "41"
+    json_close_object
+    json_add_object "RAT_Mode"
+    json_add_string "Auto" "2"
+    json_add_string "TD-SCDMA or GSM" "60"
+    json_add_string " TD-SCDMA only" "15"
+    json_add_string "LTE only" "38"
+    json_close_object
+    json_add_array "band_list"
+    for band in $(echo $LOCK_BAND | tr ',' '\n' | sort -n | uniq); do
+        json_add_string "" $band
+    done
+    json_close_array
+    json_close_object
+    LOCK_BAND=`json_dump`
+}
+
+convert2band()
+{
+    high_hexband=$1
+    low_hexband=$2
+    low_hexband=$(echo $low_hexband | grep -o "[0-9A-F]\{1,12\}")
+    high_hexband=$(echo $high_hexband | grep -o "[0-9A-F]\{1,12\}")
+    if [ -z "${low_hexband}${high_hexband}" ]; then
+        return
+    fi
+    band_list=""
+    low_bin=$(echo "ibase=16;obase=2;$low_hexband" | bc)
+    high_bin=$(echo "ibase=16;obase=2;$high_hexband" | bc)
+    len=${#low_bin}
+    for i in $(seq 1 ${#low_bin}); do
+        if [ ${low_bin:$i-1:1} = "1" ]; then
+            band_list=$band_list"\n"$((len - i + 1))
+        fi
+    done
+    len=${#high_bin}
+    for i in $(seq 1 ${#high_bin}); do
+        if [ ${high_bin:$i-1:1} = "1" ]; then
+            band_list=$band_list"\n"$((len - i + 33))
+        fi
+    done
+    echo -e $band_list | sort -n | tr '\n' ' '
+}
+
+convert2hex()
+{
+    band_list=$1
+    #splite band_list
+    band_list=$(echo $band_list | tr ',' '\n' | sort -n | uniq)
+    low_hex="0"
+    high_hex="0"
+    for band in $band_list; do
+        if [ $band -lt 33 ]; then
+            add_hex=$(echo "obase=16;2^($band - 1 )" | bc)
+            low_hex=$(echo "obase=16;ibase=16;$low_hex + $add_hex" | bc)
+        else
+            add_hex=$(echo "obase=16;2^($band - 33 )" | bc)
+            high_hex=$(echo "obase=16;ibase=16;$high_hex + $add_hex" | bc)
+        fi
+    done
+    if [ -n $hex ]; then
+        echo $high_hex,$low_hex
+    else
+        echo Invalid band
+        retrun
+    fi
+}
+
+Vendor_Set_IMEI()
+{
+    imei=$2
+    if [ -z $imei ]; then
+        echo "Invalid IMEI"
+        retrun
+    fi
+    gl_modem $ATPORT "AT^IMEI=$imei"  2>&1 > /dev/null
+    echo "Set IMEI to $imei"
+}
+
+Vendor_Lock_Band()
+{   
+    band=$arg1
+    if [ -z $band ]; then
+        echo "Invalid band"
+        retrun
+    fi
+    hex=$(convert2hex $band)
+    echo $hex
+    gl_modem $ATPORT "AT+BANDCFG=${hex},3" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT+CFUN=1,1" 2>&1 > /dev/null #重启模块
+}
+
+Vendor_Lock_RAT(){
+    rat=$arg1
+    gl_modem $ATPORT "AT^MODECONFIG=${rat}" 2>&1 > /dev/null
+
+}
+
+Vendor_reset_module(){
+    gl_modem $ATPORT "AT^MODECONFIG=38" > /dev/null 2>&1
+    gl_modem $ATPORT "AT+BANDCFG=1E2,800D5,3" > /dev/null 2>&1
+    gl_modem $ATPORT  'AT+CFUN=6,1' 2>&1 > /dev/null
+}
+
+Vendor_reboot_module(){
+    gl_modem $ATPORT "AT+CFUN=0" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT+CFUN=1" 2>&1 > /dev/null
+    Vendor_clear_cache
+}
+
+Vendor_clear_cache(){
+    rm -rf /tmp/cpe_*
+    rm -rf /tmp/vendor
+}
+
+vendor_redial(){
+    #重新检查驱动并拨号
+    /etc/init.d/modem_load_drv stop
+    /etc/init.d/modem_load_drv start
+    Vendor_clear_cache
+    /etc/init.d/modem_dial stop
+    /etc/init.d/modem_dial start
+}
+
+Vendor_get_func(){
+    json_init
+    json_add_string "Vendor" "Fibocom"
+    json_add_object "func"
+    json_add_string "reset_module" "reset_module"
+    json_add_string "reboot_module" "reboot_module"
+    json_add_string "clear_cache" "clear_cache"
+    json_add_string "redial" "redial"
+    json_close_object
+    json_close_object
+    FUNC=`json_dump`
+}
+
+Vendor_run_func(){
+    func=$arg1
+    case $func in
+        "reset_module")
+            Vendor_reset_module
+            ;;
+        "reboot_module")
+            Vendor_reboot_module
+            ;;
+        "clear_cache")
+            Vendor_clear_cache
+            ;;
+        "redial")
+            vendor_redial
+            ;;
+        *)
+            echo "Unknown func $func"
+            ;;
+    esac
+    echo "Done"
+}

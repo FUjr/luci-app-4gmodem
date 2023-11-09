@@ -1,0 +1,37 @@
+#!/bin/sh /etc/rc.common
+USE_PROCD=1
+START=97
+
+service_triggers() {
+    procd_add_reload_trigger "4gmodem"
+}
+
+start_service() {
+    logger -t 4gmodem "write crontab"
+    config_load 4gmodem
+    config_foreach write_crontab modem
+}
+
+write_crontab(){
+    config_get redial_enabled $1 redial_enabled
+    config_get redial_time_hour $1 redial_time_hour
+    config_get redial_time_min $1 redial_time_min
+    config_get redial_time_week  $1 redial_time_week
+    if [ -z "$redial_time_hour" ]; then
+        redial_time_hour=0
+    fi
+    if [ -z "$redial_time_min" ]; then
+        redial_time_min=0
+    fi
+    if [ -z "$redial_time_week" ]; then
+        redial_time_week=*
+    fi
+    crontab_line="$redial_time_min $redial_time_hour * * $redial_time_week /etc/init.d/modem_dial restart #added_by_4gmodem_$1"
+    #delect old line
+    touch /etc/crontabs/admin
+    chmod 755 /etc/crontabs/admin
+    sed -i "/added_by_4gmodem_$1/d" /etc/crontabs/admin
+    if [ "$redial_enabled" = "1" ]; then
+        echo "$crontab_line" >> /etc/crontabs/admin
+    fi
+}

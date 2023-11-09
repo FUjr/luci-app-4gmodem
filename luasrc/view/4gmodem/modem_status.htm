@@ -1,0 +1,425 @@
+
+<style>g {color:grey; font-size:75%; vertical-align: super;}</style>
+<script type="text/javascript" src="<%=resource%>/xhr.js?v=git-23.159.15540-7154b89"></script>
+<script type="text/javascript">//<![CDATA[
+    modemtype=0;
+	cell=0;
+	portx="-";
+	phonenx = "";
+	hided = 0;
+	modem_imform_<%=section%> = {
+		"cfg" : "<%=section%>",
+		"need_translate" : "1",
+	}
+
+
+	function update_data_<%=section%>(section,module_data){
+		table = document.getElementById(section +'_table_<%=section%>')
+		if (table == null){
+			return;
+		}
+		
+		for (var i in module_data){
+			if (module_data[i] == null | module_data[i] == '' | module_data[i] == '-'){
+				continue;
+			}
+
+			id = section + '_' + i +'_<%=section%>'
+			if (document.getElementById('row_'+id) != null){
+				document.getElementById('right_'+id).innerHTML = module_data[i]
+				document.getElementById('left_'+id).innerHTML = i
+			}
+			else{
+				new_div = document.createElement('div')
+				new_div.className = 'tr'
+				new_div.id = 'row_' + id
+				new_td_left = document.createElement('div')
+				new_td_left.className = 'td left'
+				new_td_left.id = 'left_' + id
+				new_td_left.innerHTML = i
+				new_td_right = document.createElement('div')
+				new_td_right.className = 'td right'
+				new_td_right.id = 'right_' + id
+				new_td_right.innerHTML = module_data[i]
+				new_div.appendChild(new_td_left)
+				new_div.appendChild(new_td_right)
+				table.appendChild(new_div)
+			}
+		}
+	}
+
+main_page_update_list = ['SIM','Signal','CellInfo','Module']
+for (var i in main_page_update_list){
+	var payload = {
+		"cfg" : "<%=section%>",
+		"need_translate" : "1",
+		"category" : main_page_update_list[i],
+	}
+	XHR.poll(10, '<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>', payload,
+	function(x, rv){	
+		for (var i in rv){
+			if ( rv[i]['data_status'] == 'timeout'){
+				force_refresh('<%=section%>',i)
+				console.log('timeout')
+				continue;
+			}
+			update_data_<%=section%>(i,rv[i])
+		}
+
+
+	});
+}
+
+function force_refresh(cfg,category){
+	var payload = {
+		"cfg" : cfg,
+		"need_translate" : "1",
+		"category" : category,
+		"force_refresh" : "1",
+	}
+	XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>', payload,
+	function(x, rv){	
+		for (var i in rv){
+			update_fun = 'update_data_' + cfg
+			//运行对应的更新函数
+			window[update_fun](i,rv[i])
+		}
+	});
+}
+
+function generate_lockrat(rat_object,section){
+	current_rat = rat_object['current_rat'] ? rat_object['current_rat'] : ''
+	RAT_Mode = rat_object['RAT_Mode'] ? rat_object['RAT_Mode'] : {}
+	//创建droplist
+	parent_id = 'LockRAT_AllowedRAT_checkbox_' + section
+	parent_node = document.getElementById(parent_id)
+	if (parent_node == null){
+		return;
+	}
+	parent_node.innerHTML = ''
+	Select = document.createElement('select')
+	Select.id = 'LockRAT_Select_' + section
+	for (var i in RAT_Mode){
+		new_option = document.createElement('option')
+		new_option.value = RAT_Mode[i]
+		new_option.innerHTML = i
+		if (current_rat == RAT_Mode[i]){
+			new_option.selected = true
+		}
+		else{
+			new_option.selected = false
+		}
+		Select.appendChild(new_option)
+	}
+	parent_node.appendChild(Select)
+	//换行并添加提交按钮 onclick = "set_lock_rat('<%=section%>')"
+	new_br = document.createElement('br')
+	parent_node.appendChild(new_br)
+	new_submit = document.createElement('input')
+	new_submit.type = 'button'
+	new_submit.value = 'set'
+	new_submit.className = 'btn cbi-button cbi-button-save'
+	new_submit.id = 'LockRAT_submit_' + section
+	new_submit.addEventListener('click',function(){
+		//disable button
+		document.getElementById('LockRAT_submit_' + section).disabled = true;
+		document.getElementById('LockRAT_submit_' + section).value = '<%:Setting..... Please wait until page refresh%>';
+		section_name = section
+		form_parent = 'LockRAT_AllowedRAT_checkbox_' + section_name;
+		form = document.getElementById(form_parent);
+		if (form == null) {
+			return;
+		}
+		RAT = '';
+
+		for (var i = 0; i < form.children.length; i++) {
+			if (form.children[i].tagName == 'SELECT'){
+				RAT = form.children[i].value;
+				break
+			}
+		}
+		var lock_rat_payload = {
+			"cfg": section_name,
+			"RAT": RAT,
+		};
+		XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "set_lock_rat")%>', lock_rat_payload,
+			function (x, data) {
+				//强制更新LockBand 和CellInfo
+				var payload = {
+					"cfg": section_name,
+					"force_refresh": "1",
+					"category": 'CellInfo,LockRAT',
+				}
+				XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>',payload,
+				function(x, rv){
+					window.location.reload()
+				});
+			});
+})
+parent_node.appendChild(new_submit)
+}
+
+
+//这里是更新锁频信息的部分
+XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>', {'category':'CellInfo,Module,LockBand','cfg':'<%=section%>'},
+	function(x, rv){	
+		var CellInfo = rv['CellInfo'] ? rv['CellInfo'] : {}
+		var Module = rv['Module'] ? rv['Module'] : {}
+		var LockBand = rv['LockBand'] ? rv['LockBand'] : {}
+		var RAT = CellInfo['RAT'] ? CellInfo['RAT'] : '' 
+		var Vendor = Module['Manufacturer'] ? Module['Manufacturer'] : ''
+		var CurrentBand = CellInfo['LBAND'] ? CellInfo['LBAND'] : '' 
+		var IMEI = Module['IMEI'] ? Module['IMEI'] : '' 
+		var LockedBand = LockBand['band_list'] ? LockBand['band_list'] : []
+		var AllowedBand = LockBand['AllowedBand'] ? LockBand['AllowedBand'] : ''
+		var Single_Choice = LockBand['Single_choice'] ? LockBand['Single_choice'] : false
+		generate_lockrat(LockBand,'<%=section%>')
+		console.log(LockedBand)
+		if (LockBand['data_status'] == 'timeout'){
+			//force refresh
+			force_refresh('<%=section%>','LockBand')
+			window.location.reload()
+		}
+		//更新对应的值
+		Rat_node = document.getElementById('LockBand_RAT_<%=section%>')
+		CurrentBand_node = document.getElementById('LockBand_Current_Band<%=section%>')
+		IMEI_node = document.getElementById('IMEI_Current_IMEI_<%=section%>')
+		//LockedBand_node = document.getElementById('LockBand_Current_Locked<%=section%>')
+		if (Rat_node != null){
+			Rat_node.innerHTML = RAT
+		}
+		if (CurrentBand_node != null){
+			CurrentBand_node.innerHTML = CurrentBand
+		}
+		if (IMEI_node != null){
+			IMEI_node.innerHTML = IMEI
+		}
+/* 		if (LockedBand_node != null){
+			LockedBand_node.innerHTML = LockedBand
+		} */
+		//如果不是移远，隐藏imei修改界面(字符串包含Quectel或Godwin)
+		if (Vendor.includes('Quectel') != true && Vendor.includes('Godwin') != true){
+			IMEI_SETTING_node = document.getElementById('IMEI_SETTING_<%=section%>')
+			if (IMEI_SETTING_node != null){
+				IMEI_SETTING_node.style.display = 'none'
+			}
+		}
+
+		//更新checkbox
+		AllowedBand_node = document.getElementById('LockBand_AllowedBand_checkbox_<%=section%>')
+		AllowedBand_node.innerHTML = ''
+		var hasSelected = false
+		if (Single_Choice){
+			Select = document.createElement('select')
+			Select.id = 'LockBand_Select_<%=section%>'
+			for (var i in AllowedBand){
+				new_option = document.createElement('option')
+				new_option.value = AllowedBand[i]
+				new_option.innerHTML = i
+				if (LockedBand.indexOf(AllowedBand[i]) != -1){
+					new_option.selected = true
+					hasSelected = true
+				}
+				else{
+					new_option.selected = false
+				}
+				Select.appendChild(new_option)
+			}
+			if (!hasSelected) {
+				// 遍历已添加到 Select 中的选项
+				for (var i = 0; i < Select.options.length; i++) {
+					var option = Select.options[i]
+					// 查看选项的 selected 属性
+					console.log(option.value, option.selected)
+					if (option.innerHTML === "LTE_Auto") {
+						// 修改选项的 selected 属性
+						option.selected = true // 设置为选中状态
+					}else{
+						console.log("Auto elem not found .")
+					}
+				}
+			}
+			else{
+				console.log("Has selected .")
+			}
+			AllowedBand_node.appendChild(Select)
+		}
+		else{
+			count = 0
+			//将json转化为数组
+			AllowedBand_keys = Object.keys(AllowedBand)
+			//按照升序排列
+			checkbox_list = []
+			for ( key of AllowedBand_keys.sort() ){
+				value = AllowedBand[key]
+				new_checkbox = document.createElement('input')
+				new_checkbox.type = 'checkbox'
+				new_checkbox.value = value
+				new_checkbox.name = key
+				new_checkbox.innerHTML = key
+				new_checkbox.id = value + '_checkbox_<%=section%>'
+				new_checkbox.setAttribute('band_list','true')
+				checkbox_list.push(new_checkbox)
+				if ( LockedBand.indexOf(value) != -1  ){
+					new_checkbox.checked = true
+				}
+				else{
+					console.log(value)
+					new_checkbox.checked = false
+				}
+				if (count % 4 == 0){
+					new_br = document.createElement('br')
+					AllowedBand_node.appendChild(new_br)
+				}
+				AllowedBand_node.appendChild(new_checkbox)
+				new_label = document.createElement('label')
+				new_label.innerHTML = key
+				new_label.setAttribute('for',value + '_checkbox_<%=section%>')
+				AllowedBand_node.appendChild(new_label)
+				count += 1
+			}
+			//换行并添加全选checkbox
+			new_br = document.createElement('br')
+			AllowedBand_node.appendChild(new_br)
+			new_checkbox = document.createElement('input')
+			new_checkbox.type = 'checkbox'
+			new_checkbox.value = 'all'
+			new_checkbox.name = 'all'
+			new_checkbox.innerHTML = 'all'
+			new_checkbox.id = 'all_checkbox_<%=section%>'
+			new_checkbox.addEventListener('click', function () {
+				is_check = document.getElementById('all_checkbox_<%=section%>').checked
+				form_parent = 'LockBand_AllowedBand_checkbox_' + '<%=section%>';
+				form = document.getElementById(form_parent);
+				if (form == null) {
+					return;
+				}
+				for (var i = 0; i < form.children.length; i++) {
+					if (form.children[i].tagName == 'INPUT') {
+						form.children[i].checked = is_check
+					}
+				}
+			})
+			AllowedBand_node.appendChild(new_checkbox)
+			new_label = document.createElement('label')
+			new_label.innerHTML = '<%:select all%>'
+			new_label.setAttribute('for', 'all_checkbox_<%=section%>')
+			AllowedBand_node.appendChild(new_label)
+		}
+		
+		//换行并添加提交按钮 onclick = "set_lock_band('<%=section%>')"
+		new_br = document.createElement('br')
+		AllowedBand_node.appendChild(new_br)
+		new_submit = document.createElement('input')
+		new_submit.type = 'button'
+		new_submit.value = 'set'
+		new_submit.className = 'btn cbi-button cbi-button-save'
+		new_submit.id = 'LockBand_submit_<%=section%>'
+		new_submit.addEventListener('click',function(){
+			//disable button
+			document.getElementById('LockBand_submit_<%=section%>').disabled = true;
+			document.getElementById('LockBand_submit_<%=section%>').value = '<%:Setting..... Please wait until page refresh%>';
+			section_name = '<%=section%>'
+			form_parent = 'LockBand_AllowedBand_checkbox_' + section_name;
+			form = document.getElementById(form_parent);
+			if (form == null) {
+				return;
+			}
+			band_list = [];
+
+			for (var i = 0; i < form.children.length; i++) {
+				if (form.children[i].checked == true) {
+					//如果band_list属性为true，说明是checkbox
+					if (form.children[i].getAttribute('band_list') == 'true'){
+						band_list.push(form.children[i].value);
+					}
+				}
+				if (form.children[i].tagName == 'SELECT'){
+					band_list.push(form.children[i].value);
+					break
+				}
+			}
+			//将bandlist转换成,分隔的字符串
+			band_list = band_list.join(',')
+			var lock_band_payload = {
+				"cfg": "<%=section%>",
+				"band_list": band_list,
+			};
+			XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "set_lock_band")%>', lock_band_payload,
+				function (x, data) {
+					//强制更新LockBand 和CellInfo
+					var payload = {
+						"cfg": "<%=section%>",
+						"force_refresh": "1",
+						"category": 'CellInfo,LockBand',
+					}
+					XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>',payload,
+					function(x, rv){
+						window.location.reload()
+					});
+				}
+);
+		})
+		AllowedBand_node.appendChild(new_submit)
+	});
+
+
+
+//]]></script>
+
+
+
+<div class="cbi-section fade-in" style="display: none;">
+	<h3>
+		<%:Module Info%>
+	</h3>
+	<div id='row_Module_<%:data_status%>_<%=section%>' class="cbi-map-discr">
+		<span id='left_Module_<%:data_status%>_<%=section%>'></span>
+		<span id='right_Module_<%:data_status%>_<%=section%>'></span>
+	</div>
+	<input type="button" onclick="force_refresh('<%=section%>','Module')" class="cbi-button" value="<%:Refresh%>">
+	<div class="table" id="Module_table_<%=section%>">
+	</div>
+</div>
+
+<div class="cbi-section fade-in">
+	<h3>
+		<%:SIM Info%>
+	</h3>
+	<div id='row_SIM_<%:data_status%>_<%=section%>' class="cbi-map-discr">
+		<span id='left_SIM_<%:data_status%>_<%=section%>'></span>
+		<span id='right_SIM_<%:data_status%>_<%=section%>'></span>
+	</div>
+	<div class="table" id="SIM_table_<%=section%>">
+	</div>
+	<input type="button" onclick="force_refresh('<%=section%>','SIM')" class="cbi-button" value="<%:Refresh%>">
+</div>
+
+<div class="cbi-section fade-in">
+	<h3>
+		<%:Cell Info%>
+	</h3>
+	<div id='row_CellInfo_<%:data_status%>_<%=section%>' class="cbi-map-discr">
+		<span id='left_CellInfo_<%:data_status%>_<%=section%>'></span>
+		<span id='right_CellInfo_<%:data_status%>_<%=section%>'></span>
+	</div>
+	<div class="table" id="CellInfo_table_<%=section%>">
+	</div>
+	<input type="button" onclick="force_refresh('<%=section%>','CellInfo')" class="cbi-button" value="<%:Refresh%>">
+</div>
+
+<div class="cbi-section fade-in">
+	<h3>
+		<%:Signal Info%>
+	</h3>
+	<div id='row_Signal_<%:data_status%>_<%=section%>' class="cbi-map-discr">
+		<span id='left_Signal_<%:data_status%>_<%=section%>'></span>
+		<span id='right_Signal_<%:data_status%>_<%=section%>'></span>
+	</div>
+	
+	<div class="table" id="Signal_table_<%=section%>">
+	</div>
+	<input type="button" onclick="force_refresh('<%=section%>','Signal')" class="cbi-button" value="<%:Refresh%>">
+</div>
+
+</div>

@@ -1,0 +1,59 @@
+port='/dev/ttyUSB1'
+
+
+modem_dial(){
+    local user
+    local password
+    local apn
+    local auth
+    local pincode
+    local device
+    local pdptype
+    local port='/dev/ttyUSB1'
+    local count=0
+    #切换到cdc网卡
+    uci set network.wan.ifname="usb0"
+    uci set network.wan6.ifname="usb0"
+    uci set network.wan6.proto="dhcpv6"
+    uci set network.wan6.extendprefix=1
+    uci commit network
+
+    #等待ttyUSB1出现
+    logger -t 4gmodem "wait for cdc device"
+    while [ ! -e "${port}" ]; do
+        sleep 1
+    done
+    logger -t 4gmodem "dial cdc device"
+
+    config_get user $1 user
+    config_get password $1 password
+    config_get apn $1 apn
+    config_get auth $1 auth
+    config_get pincode $1 pincode
+    config_get device $1 device
+    config_get pdptype $1 pdptype
+    config_get tty $1 tty
+    config_get atcmd $1 atcmd
+    config_get tool $1 tool
+    if [ -n "$user" ] && [ -n "$password" ] && [ -n "$auth" ]; then
+        #切换到gobinet模式
+        gl_modem "${port}" 'AT+LSHECMEN=0'
+        gobinet_dial $1
+    fi
+    if [ -n "$pincode" ]; then
+        gl_modem "${port}" "AT+CPIN=${pincode}"
+    fi
+    if [ -n "$apn" ]; then
+        gl_modem "${port}" "AT+CGDCONT=1,\"IPV4V6\",\"${apn}\""
+    fi
+    
+    gl_modem "${port}" 'AT+LSHECMEN=1,1'
+    
+    ifdown wan && ifup wan
+}
+
+
+
+modem_stop(){
+    gl_modem "${port}" 'AT+LSHECMEN=1,0'
+}

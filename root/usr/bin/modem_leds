@@ -1,0 +1,192 @@
+#!/bin/sh
+
+# net_4g=( "FDD LTE" "TDD LTE" )
+# net_3g=( "TDSCDMA" "HSPA+" "HSUPA" "HSDPA" "WCDMA" "CDMA" "EVDO" )
+# net_2g=( "EDGE" "GPRS" "GSM" )
+
+source /usr/share/libubox/jshn.sh 
+
+net_4g="FDD LTE TDD LTE"
+net_3g_2g="TDSCDMA HSPA+ HSUPA HSDPA WCDMA CDMA EVDO EDGE GPRS GSM"
+
+log() {
+	logger -t "modem-led " "$@"
+}
+
+led_ctl() {
+COMMD=$1
+	case $COMMD in
+        # 0: off
+		"0" )
+			echo none > /sys/class/leds/blue:signal/trigger
+			echo 0  > /sys/class/leds/blue:signal/brightness
+			echo none > /sys/class/leds/red:wwan/trigger
+			echo 0  > /sys/class/leds/red:wwan/brightness
+			echo none > /sys/class/leds/green:wwan/trigger
+			echo 0  > /sys/class/leds/green:wwan/brightness
+			echo none > /sys/class/leds/blue:wwan/trigger
+			echo 0  > /sys/class/leds/blue:wwan/brightness
+			;;
+        # 1:booting
+		"1" )
+			echo timer > /sys/class/leds/blue:signal/trigger
+			echo 500  > /sys/class/leds/blue:signal/delay_on
+			echo 500  > /sys/class/leds/blue:signal/delay_off
+            echo none > /sys/class/leds/green:wwan/trigger
+			echo 0  > /sys/class/leds/green:wwan/brightness
+			echo none > /sys/class/leds/blue:wwan/trigger
+			echo 0  > /sys/class/leds/blue:wwan/brightness
+			echo none > /sys/class/leds/red:wwan/trigger
+			echo 1  > /sys/class/leds/red:wwan/brightness
+			;;
+        # 2:found modem
+		"2" )
+			echo timer > /sys/class/leds/blue:signal/trigger
+			echo 100  > /sys/class/leds/blue:signal/delay_on
+			echo 100  > /sys/class/leds/blue:signal/delay_off
+			;;
+        # 4:network mode
+		"4" )
+			mode=$2
+            MODE=1
+            for i in $net_4g
+            do
+                net_mode=$(echo $mode | grep $i | wc -l)
+                if [ "$net_mode" = "1" ];then
+                    MODE=0
+                    break
+                fi
+            done
+            for i in $net_3g_2g
+            do
+                net_mode=$(echo $mode | grep $i | wc -l)
+                if [ "$net_mode" = "1" ];then
+                    MODE=1
+                    break
+                fi
+            done
+            case $MODE in
+                "0")
+                    echo none > /sys/class/leds/green:wwan/trigger
+                    echo 0  > /sys/class/leds/green:wwan/brightness
+                    echo timer > /sys/class/leds/blue:wwan/trigger
+                    echo 1  > /sys/class/leds/blue:wwan/brightness
+                    echo 2000 > /sys/class/leds/blue:wwan/delay_on
+                    echo 100 > /sys/class/leds/blue:wwan/delay_off
+                    ;;
+                *)
+                    echo timer > /sys/class/leds/green:wwan/trigger
+                    echo 1  > /sys/class/leds/green:wwan/brightness
+                    echo 2000 > /sys/class/leds/green:wwan/delay_on
+                    echo 100 > /sys/class/leds/green:wwan/delay_off
+                    echo none > /sys/class/leds/blue:wwan/trigger
+                    echo 0  > /sys/class/leds/blue:wwan/brightness
+                    ;;
+            esac
+            ;;
+	# 5:network disconnect
+		"5" )
+		    echo timer > /sys/class/leds/red:wwan/trigger
+            echo 2000 > /sys/class/leds/red:wwan/delay_on
+            echo 100 > /sys/class/leds/red:wwan/delay_off
+		    echo 1  > /sys/class/leds/red:wwan/brightness
+            echo none > /sys/class/leds/blue:wwan/trigger
+		    echo 0  > /sys/class/leds/blue:wwan/brightness
+            echo none > /sys/class/leds/green:wwan/trigger
+		    echo 0  > /sys/class/leds/green:wwan/brightness
+	     ;;
+	# 6:network connected
+		"6" )
+		    echo none > /sys/class/leds/red:wwan/trigger
+		    echo 0  > /sys/class/leds/red:wwan/brightness
+	     ;;
+	esac
+}
+
+get_mode() {
+    /usr/libexec/modem_ctrl CellInfo cfg0103f7 2>&1 > /dev/null
+    CellInfo=$(cat /tmp/cpe_CellInfo_cfg0103f7.json)
+    json_load "$CellInfo"
+    json_get_var RAT RAT
+    echo $RAT
+}
+
+vendor=""
+booting=0
+connect=0
+led_ctl 0
+if_down_count=0
+redial_count=0
+while true
+do
+    if [ $booting -eq 0 ];then
+        echo booting
+        if [ -e '/dev/ttyUSB1' ];then
+            led_ctl 1
+            booting=1
+        fi
+    else
+        echo check dial mode
+        cdc_check=$(gl_modem /dev/ttyUSB1 'AT+LSHECMEN?' | grep '+LSHECMEN: 1')
+        if [ -n "$cdc_check" ];then
+            echo cdc
+            cdc_check=$(echo $cdc_check | grep '+LSHECMEN: 1,1,1')
+            if [ -n "$cdc_check" ];then
+                led_ctl 6
+                connect=1
+            else
+                led_ctl 5
+                connect=0
+            fi
+        else
+            wan_status=$(ifstatus wan)
+            json_load "$wan_status"
+            json_get_var up "up"
+            json_get_var available "available"
+            json_close_object
+            if [ "$up" -eq 1 ] && [ "$available" -eq 1 ];then
+                echo wan up
+                led_ctl 6
+                connect=1
+            else
+                led_ctl 5
+                connect=0
+            fi
+        fi
+    fi
+    if [ $connect -eq 1 ];then
+        net_mode=$(get_mode)
+        led_ctl 4 "$net_mode"
+    fi
+
+    if [ $booting -eq 0 ];then
+        sleep 5
+    elif [ $connect -eq 0 ];then
+        sleep 5
+    else
+        sleep 30
+    fi
+    enabled=$(uci get 4gmodem.@modem[0].enabled)
+    #增加断网重拨、重启模组，断网5周期重拨一次，重拨3次后重启模组
+    if [ $connect -eq 0 ] && [ "$enabled" -eq "1" ];then
+        if_down_count=$(($if_down_count+1))
+        if [ $if_down_count -eq 5 ];then
+            logger -t 4gmodem "modem redial"
+            /etc/init.d/modem_dial restart
+            if_down_count=0
+            redial_count=$(($redial_count+1))
+            sleep 15
+        fi
+        if [ $redial_count -eq 3 ];then
+            logger -t 4gmodem "modem redial 3 times, reboot modem"
+            rm -rf /tmp/sierra_boot
+            /etc/init.d/modem_reboot stop
+            /etc/init.d/modem_load_drv restart
+            redial_count=0
+            sleep 15
+        fi
+    else
+        if_down_count=0
+        redial_count=0
+    fi
+done

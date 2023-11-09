@@ -1,0 +1,131 @@
+<script type="text/javascript">//<![CDATA[
+
+    lock_band_payload_<%=section %> = {
+        "cfg": "<%=section%>",  
+        }
+
+    function run_func(cfg, func){
+        payload = {
+            "cfg": cfg,
+            "func": func
+        }
+        XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "run_func")%>',payload,
+            function(x, data) {
+                if (data) {
+                    alert(data["msg"]);
+                }
+            }
+        );
+    }
+
+
+        get_payload = {
+            "cfg": "<%=section%>",
+            "need_translate" : "1",
+		    "category" : 'GetFunc',
+        }
+        XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>',get_payload,
+            function(x, data) {
+                func_dict = data['GetFunc']['func'] 
+
+                modem_func_section = document.getElementById("Modem_func_section_<%=section%>");
+                funcs = Object.keys(func_dict);
+                for (var i = 0; i < funcs.length; i++) {
+                    function_display_name = funcs[i];
+                    func = func_dict[funcs[i]];
+                    new_label = document.createElement("label");
+                    new_label.className = "cbi-value-title";
+                    new_label.innerHTML = "<input class=\"btn cbi-button cbi-button-save\" type=\"button\" value=\"" + function_display_name + "\" onclick=\"run_func('<%=section%>', '" + func + "')\" />";
+                    modem_func_section.appendChild(new_label);
+                }
+            }
+        );
+  
+
+
+
+    //]]>
+</script>
+<fieldset class="cbi-section">
+    <div class="cbi-section fade-in">
+        <h3>
+            <%:LockBand Info%>
+        </h3>
+        <div class="table" id="LockBand_table_<%=section%>">
+            <div class="tr">
+                <div class="td left">
+                    <label class="cbi-value-title">
+                        <%:Current band%>
+                    </label>
+                </div>
+                <div class="td right">
+                    <span id="LockBand_Current_Band<%=section%>">
+                        <%:Loading%>
+                    </span>
+                </div>
+            </div>
+            <div class="tr">
+                <div class="td left">
+                    <label class="cbi-value-title">
+                        <%:Current RAT(RadioAccess Technology)%>
+                    </label>
+                </div>
+                <div class="td right">
+                    <span id="LockBand_RAT_<%=section%>">
+                        <%:Loading%>
+                    </span>
+                </div>
+            </div>
+<!-- 
+            <div class="tr">
+                <div class="td left">
+                    <label class="cbi-value-title">
+                        <%:Current_Locked%>
+                    </label>
+                </div>
+                <div class="td right">
+                    <div id="LockBand_Current_Locked<%=section%>">
+                        <%:Loading%>
+                    </div>
+                </div>
+            </div> -->
+
+            <div class="tr">
+                <div class="td left">
+                    <label class="cbi-value-title">
+                        <%:Lock Band%>
+                    </label>
+                </div>
+                <div class="td right" id="LockBand_AllowedBand_checkbox_<%=section%>">
+                    <%:Loading%>
+
+
+                </div>
+            </div>
+
+            <div class="tr">
+                <div class="td left">
+                    <label class="cbi-value-title">
+                        <%:Lock RAT%>
+                    </label>
+                </div>
+                <div class="td right" id="LockRAT_AllowedRAT_checkbox_<%=section%>">
+                    <%:Loading%>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+
+</fieldset>
+<fieldset class="cbi-section" onload="get_func('<%=section%>')">
+    <h3>
+        <%:modem func%>
+    </h3>
+    <div class="cbi-section fade-in">
+    <div class="cbi-value" id="Modem_func_section_<%=section%>">
+        <!-- add botton -->
+    </div>
+    </div>
+</fieldset>

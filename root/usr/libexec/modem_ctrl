@@ -1,0 +1,137 @@
+cfg=$2
+arg1=$3
+ATPORT=$(uci -q get 4gmodem.${cfg}.at_port)
+source /usr/libexec/modem/get_vendor 2>&1 > /dev/null
+source /usr/share/libubox/jshn.sh 
+source /usr/libexec/cpedebug
+logger -t 4gmodem "modem_ctrl $1 $2 $3"
+logger -t 4gmodem "vendor $vendor"
+
+Auto_vendor()
+{
+    #获取厂商
+    source /usr/libexec/modem/${vendor}
+}
+
+
+update_all()
+{
+    Date=$(date "+%Y-%m-%d %H:%M:%S")
+    All_CSQ
+    Vendor_SIMINFO
+    Vendor_Cellinfo
+    Vendor_Get_Lock_Band
+    Vendor_ModuleInfo
+    echo $CSQ_INFO > /tmp/cpe_Signal_${cfg}.json
+    echo $SIM_INFO > /tmp/cpe_SIM_${cfg}.json
+    echo $CELL_INFO > /tmp/cpe_Cell_${cfg}.json
+    echo $MODULE_INFO > /tmp/cpe_Module_${cfg}.json
+    echo $LOCK_BAND > /tmp/cpe_LockBand_${cfg}.json
+}
+
+update_lock_band_info(){
+    Vendor_Get_Lock_Band
+    echo $LOCK_BAND > /tmp/cpe_LockBand_${cfg}.json
+}
+
+update_csq(){
+    All_CSQ
+    echo $CSQ_INFO > /tmp/cpe_Signal_${cfg}.json
+}
+
+update_sim_info(){
+    Vendor_SIMINFO
+    echo $SIM_INFO > /tmp/cpe_SIM_${cfg}.json
+}
+
+update_cell_info(){
+    Vendor_Cellinfo
+    echo $CELL_INFO > /tmp/cpe_CellInfo_${cfg}.json
+}
+
+update_module_info(){
+    Vendor_ModuleInfo
+    echo $MODULE_INFO > /tmp/cpe_Module_${cfg}.json
+}
+
+
+set_imei()
+{
+    Vendor_Set_IMEI $cfg $arg1
+    rm -rf /tmp/cpe_Module_${cfg}.json
+}
+
+lock_band()
+{
+    Vendor_Lock_Band $cfg $arg1
+    rm -rf /tmp/cpe_LockBand_${cfg}.json
+}
+
+lock_rat()
+{
+    Vendor_Lock_RAT $cfg $arg1
+    rm -rf /tmp/cpe_LockBand_${cfg}.json
+}
+
+reset()
+{
+    Vendor_reset_module $cfg
+}
+
+GetFunc()
+{
+    Vendor_get_func
+    echo $FUNC > /tmp/cpe_GetFunc_${cfg}.json
+}
+
+run_func()
+{
+    Vendor_run_func
+}
+
+Auto_vendor
+case $1 in
+    read_info)
+        update_all
+        ;;
+    set_imei)
+        set_imei
+        ;;
+    lock_band)
+        lock_band
+        ;;
+    lock_rat)
+        lock_rat
+        ;;
+    Signal)
+        update_csq
+        ;;
+    CellInfo)
+        update_cell_info
+        ;;
+    SIM)
+        update_sim_info
+        ;;
+    Module)
+        update_module_info
+        ;;
+    LockBand)
+        update_lock_band_info
+        ;;
+    update_all)
+        update_all
+        ;;
+    reset)
+        reset
+        ;;
+    GetFunc)
+        GetFunc
+        ;;
+    run_func)
+        run_func
+        ;;
+    *)
+        echo "Usage: $0 {read_info|set_imei|lock_band|update_csq|update_cell_info|update_sim_info|update_module_info|update_lock_band_info|update_all|reset|GetFunc|run_func}"
+        exit 1
+        ;;
+esac

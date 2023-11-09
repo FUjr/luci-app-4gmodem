@@ -1,0 +1,51 @@
+<script type="text/javascript">//<![CDATA[
+
+
+    function set_imei_<%=section%>(){
+        b = document.getElementById('IMEI_set_status_<%=section%>')
+        cbi_submit(this, 'cbi.apply')
+        imei = document.getElementById('IMEI_Target_IMEI_<%=section%>').value;
+        b.innerHTML = '<b><%:Setting..... Please wait until page refresh%></b>';
+        b.disabled = true;
+        XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "set_imei")%>', {'cfg': '<%=section%>', 'imei': imei},
+        function(x, data) {
+
+            var tb = document.getElementById('IMEI_set_status_<%=section%>');
+            if (data && tb) {
+                tb.innerHTML = '<b>' + data.set_status + '</b>';
+                setTimeout(function() {
+                    tb.innerHTML = '';
+                    window.location.reload();
+                    }, 2000);
+            }
+            
+        }
+    );
+    }
+    
+    //]]>
+    </script>
+    <fieldset class="cbi-section" id="IMEI_SETTING_<%=section%>">
+        <h3>
+            <%:IMEI Setting%>
+        </h3>
+        <div class="table">
+            <div class="tr">
+                <div class="td left"> <%:Current_imei%></div>
+                <div class="td right" id="IMEI_Current_IMEI_<%=section%>"> <%:Loading%></div>
+            </div>
+            <div class="tr">
+                <div class="td left"> <%:Target IMEI%></div>
+                <div class="td right"> <input class="cbi-input-text" id="IMEI_Target_IMEI_<%=section%>" name="IMEI_Target_IMEI_<%=section%>" size="20" type="text"  /></div>
+            </div>
+        </div>
+        
+
+        
+
+        <div class="cbi-value">
+            <label class="cbi-value-title"> <input class="btn cbi-button cbi-button-save" id="IMEI_set_status_<%=section%>" type="button" value="<%:set%>" onclick="set_imei_<%=section%>()" />   </label>
+        </div>
+        
+    </fieldset>
+    

@@ -1,0 +1,60 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+USE_PROCD=1
+
+service_triggers()
+{
+        procd_add_reload_trigger "4gmodem"
+}
+
+start_service() {
+    logger -t 4gmodem "start set ttl"
+    config_load 4gmodem
+    config_foreach set_ttl modem
+    
+}
+
+init_set_ttl_chain(){
+    chain=$(iptables -t mangle -nvL | grep -o "set_ttl" | wc -l)
+    if [ "$chain" -eq 0 ]; then
+        iptables -t mangle -N set_ttl
+        iptables -t mangle -A PREROUTING -j set_ttl
+        ip6tables -t mangle -N set_ttl
+        ip6tables -t mangle -A PREROUTING -j set_ttl
+    fi
+}
+
+stop_service() {
+    logger -t 4gmodem "stop set ttl"
+    iptables -t mangle -F set_ttl
+}
+
+reload_service() {
+    stop_service
+    start_service
+}
+
+stop(){
+    stop_service
+}
+
+set_ttl(){
+    logger -t 4gmodem "set ttl $1"
+    config_get ttl $1 ttl
+    config_get ttl_enabled $1 ttl_enabled
+    if [ "$ttl_enabled" = "1" ]; then
+        logger -t 4gmodem "set ttl $1 $ttl"
+        if [ -n "$ttl" ]; then
+            init_set_ttl_chain
+            iptables -t mangle -F set_ttl
+            echo $ttl > /proc/sys/net/ipv4/ip_default_ttl
+            #将出口流量的ttl设置为指定值
+            iptables -t mangle -A set_ttl -o eth1 -j TTL --ttl-set $ttl
+            iptables -t mangle -A set_ttl -o wwan0 -j TTL --ttl-set $ttl
+            ip6tables -t mangle -F set_ttl
+            ip6tables -t mangle -A set_ttl -o eth1 -j HL --hl-set $ttl
+        fi
+    fi
+}

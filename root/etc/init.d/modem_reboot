@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+STOP=10
+USE_PROCD=1
+
+reboot_module(){
+    /usr/libexec/modem_ctrl run_func $1 reboot_module
+}
+
+stop_service(){
+    config_load 4gmodem
+    config_foreach reboot_module modem
+}

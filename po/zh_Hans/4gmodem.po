@@ -1,0 +1,204 @@
+msgid ""
+msgstr ""
+
+msgid "Cellular"
+msgstr "移动数据"
+
+msgid "set_bandlock_info1"
+msgstr " 输入需要锁频的频段，多个频段用半角逗号分隔,如1,2,3,4,5"
+
+msgid "set_bandlock_info2"
+msgstr " 输入需要锁频的频段，gsm和umts直接输入频段，lte则为100+频段，多个频段用半角逗号分隔，如900,1800,101"
+
+msgid "set_bandlock_info3"
+msgstr " 输入锁频频段（如果模块不支持该频段会变成自动。）只支持锁单频"
+
+msgid "Lock Band Setting"
+msgstr "锁频设置"
+
+msgid "Current band"
+msgstr "当前频段"
+
+msgid "Current RAT(RadioAccess Technology)"
+msgstr "当前RAT"
+
+msgid "Current Band Configuration"
+msgstr "当前频段配置"
+
+msgid "Lock Band"
+msgstr "锁频配置"
+
+msgid "Modem Settings"
+msgstr "模块设置"
+
+msgid "Base setting and information"
+msgstr "基础设置与信息"
+
+msgid "Dial Setup"
+msgstr "拨号设置"
+
+msgid "Advanced Dial Setting"
+msgstr "高级拨号设置"
+
+msgid "Advanced Settings"
+msgstr "高级设置"
+
+msgid "Modem Information"
+msgstr "模块信息"
+
+msgid "AT PORT"
+msgstr "AT端口"
+
+msgid "Modem Status"
+msgstr "模块状态"
+
+msgid "Enable"
+msgstr "开启"
+
+msgid "Modem device"
+msgstr "模块设备"
+
+msgid "APN"
+msgstr "APN设置"
+
+msgid "PAP/CHAP Username"
+msgstr "PAP/CHAP 用户"
+
+msgid "PAP/CHAP Password"
+msgstr "PAP/CHAP 密码"
+
+msgid "PIN Code"
+msgstr "PIN码"
+
+msgid "Authentication Type"
+msgstr "验证类型"
+
+msgid "-- Please choose --"
+msgstr "--- 请选择 ---"
+
+msgid "Tools"
+msgstr "拨号工具"
+
+msgid "PdpType"
+msgstr "IP获取方式"
+
+msgid "Set_IMEI"
+msgstr "修改IMEI"
+
+msgid "Set_BAND"
+msgstr "设定频段"
+
+msgid "General Info"
+msgstr "常规信息"
+
+msgid "Module:"
+msgstr "模组        :"
+
+msgid "Manufacturer:"
+msgstr "厂商        :"
+
+msgid "Temperature :"
+msgstr "温度        :"
+
+msgid "Update Time :"
+msgstr "更新时间    :"
+
+msgid "SIM Info"
+msgstr "SIM卡状态"
+
+msgid "Cell Info"
+msgstr "基站信息"
+
+msgid "Signal Info"
+msgstr "信号状态"
+
+msgid "Refresh"
+msgstr "手动刷新"
+
+msgid "NUMBER :"
+msgstr "SIM卡号码:"
+
+msgid "Signal Status"
+msgstr "信号状态"
+
+msgid "Network type :"
+msgstr "网络类型     :"
+
+msgid "Signal Strength :"
+msgstr "信号强度        :"
+
+msgid "Connect Info"
+msgstr "基站信息"
+
+msgid "IMEI Setting"
+msgstr "IMEI设置"
+
+msgid "Current_imei"
+msgstr "当前IMEI"
+
+msgid "set"
+msgstr "设置"
+
+msgid "Loading"
+msgstr "加载中"
+
+msgid "undefined"
+msgstr "未知"
+
+msgid "RAT"
+msgstr "接入技术"
+
+
+msgid "CSQ_PER"
+msgstr "信号强度百分比"
+
+msgid "RSSI"
+msgstr "信号强度"
+
+msgid "RSRP"
+msgstr "参考信号接收功率"
+
+msgid "RSRQ"
+msgstr "参考信号接收质量"
+
+msgid "SINR"
+msgstr "信噪比"
+
+msgid "PCI"
+msgstr "小区物理ID"
+
+msgid "EARFCN"
+msgstr "小区频点"
+
+msgid "TAC"
+msgstr "小区区域码"
+
+msgid "CellID"
+msgstr "小区ID"
+
+msgid "Band"
+msgstr "频段"
+
+msgid "Bandwidth"
+msgstr "带宽"
+
+msgid "MCC"
+msgstr "移动国家码"
+
+msgid "MNC"
+msgstr "移动网络码"
+
+msgid "Carrier"
+msgstr "运营商"
+
+msgid "Revision"
+msgstr "版本"
+
+msgid "Model"
+msgstr "型号"
+
+msgid "Manufacturer"
+msgstr "厂商"
+
+msgid "data_status"
+msgstr "数据更新时间"

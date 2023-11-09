@@ -1,0 +1,33 @@
+#!/bin/sh
+dial_loop(){
+    dial_port=$1
+    dial_cmd=$2
+
+    #循环
+    while true ;do
+        check_dial=$(gl_modem "${dial_port}" 'AT$QCRMCALL?' | grep -o "QCRMCALL: 1,")
+        if [ -n "$check_dial" ]; then
+            sleep 5
+        else
+            #再测试5次
+            count=0
+            while [ $count -lt 5 ]; do
+                check_dial=$(gl_modem "${dial_port}" 'AT$QCRMCALL?' | grep -o "QCRMCALL: 1,")
+                if [ -n "$check_dial" ]; then
+                    break
+                else
+                    count=$(($count + 1))
+                    logger -t 4gmodem "dial fail,redial"
+                    ifdown wan && ifup wan
+                    gl_modem "${dial_port}" 'AT$QCRMCALL=0,1'
+                    logger -t 4gmodem "dial gobinet device dial_cmd:${dial_cmd}"
+                    gl_modem "${dial_port}" ${dial_cmd}
+                    sleep 5
+                fi
+            done
+        fi
+        sleep 5
+    done
+}
+logger -t 4gmodem "dial ls gobinet device"
+dial_loop $1 $2

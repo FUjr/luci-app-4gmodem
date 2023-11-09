@@ -1,0 +1,72 @@
+#!/bin/sh
+#如果存在cfg则使用cfg，否则使用$1，否则使用@modem[0]
+if [ -z "$cfg_hash" ]; then
+    if [ -n "$cfg" ]; then
+        cfg_hash=$cfg
+    elif [ -n "$1" ]; then
+        cfg_hash=$1
+    else
+        cfg_hash=@modem[0]
+    fi
+fi
+#加载配置
+. /lib/functions.sh
+config_load 4gmodem
+#获取usb_port
+config_get usb_port $cfg_hash usb_port
+#如果不存在usb_port则退出
+if [ ! -e $usb_port ]; then
+    echo Unknown
+    exit 1
+fi
+idProduct=$(cat $usb_port/idProduct)
+idVendor=$(cat $usb_port/idVendor)
+tty_driver_name="option"
+case $idVendor in
+    '1508')
+        #Fibocom
+        vendor="Fibocom"
+        tty_driver_if="2"
+        ;;
+    '1c9e')
+        #LONGSUNG
+        vendor="LONGSUNG"
+        tty_driver_if="2"
+        ;;
+    '2c7c')
+        #Quectel
+        vendor="Quectel"
+        tty_driver_if="3"
+        ;;
+    '05c6')
+        #Godwin or Quectel
+        case $idProduct in
+            '9215')
+                #Quectel
+                vendor="Quectel"
+                tty_driver_if="2"
+                ;;
+            '9091')
+                #Godwin
+                vendor="Godwin"
+                tty_driver_if="1"
+                ;;
+            *)
+                #Unknown
+                vendor="Unknown"
+                tty_driver_if="2"
+                ;;
+        esac
+        ;;
+    '1199')
+        #Sierra
+        vendor="Sierra"
+        tty_driver_if="3"
+        ;;
+    *)
+        #Unknown
+        vendor="Unknown"
+        tty_driver_if="2"
+        ;;
+esac
+echo $vendor

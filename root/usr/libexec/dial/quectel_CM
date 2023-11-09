@@ -1,0 +1,59 @@
+modem_dial() {
+    local enabled
+    local user
+    local password
+    local apn
+    local auth
+    local pincode
+    local device
+    local pdptype
+    config_get user $1 user
+    config_get password $1 password
+    config_get apn $1 apn
+    config_get auth $1 auth
+    config_get pincode $1 pincode
+    config_get device $1 device
+    config_get pdptype $1 pdptype
+    config_get tool $1 tool
+    config_get log_enabled $1 log_enabled
+    ip_type="${pdptype}"
+    if [ "$pdptype" = "IPv4v6" ]; then
+        pdptype='-4 -6'
+    elif [ "$pdptype" = "IPv6" ]; then
+        pdptype='-6'
+    else
+        pdptype='-4'
+    fi
+    uci set network.wan.ifname="wwan0"
+    uci set network.wan6.ifname="wwan0"
+    uci set network.wan6.proto="dhcpv6"
+    uci set network.wan6.extendprefix=1
+    uci commit network
+    procd_open_instance
+    tool="quectel-CM"
+    procd_set_param command $tool
+    if [ -n  "$apn"  ]; then
+        procd_append_param command -s $apn
+    fi
+    procd_append_param command $pdptype
+    if [ -n "$password" ]; then
+        procd_append_param command $user $password $auth
+    fi
+    if [ -n "$pincode"  ]; then
+        procd_append_param command -p $pincode
+    fi
+    if [ "$log_enabled" = "1" ]; then
+        procd_append_param command -f /tmp/4g.log
+    fi
+    echo $tool -i $ifname -s $apn $pdptype $user $password $auth  -p $pincode >/tmp/4g.log
+    procd_set_param respawn 60 5 5
+    procd_close_instance
+    sleep 10
+    ifdown wan
+    ifup wan
+}
+
+modem_stop(){
+    killall quectel-CM
+    logger -t 4gmodem "killall quectel-CM"
+}

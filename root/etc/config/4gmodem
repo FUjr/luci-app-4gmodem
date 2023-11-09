@@ -1,0 +1,10 @@
+config modem
+        option at_port '/dev/ttyUSB2'
+        option enabled '1'
+        option device '/dev/cdc-wdm0'
+        option tool 'quectel-CM'
+        option pdptype 'IPv4v6'
+        option ttl 64
+        option ttl_enabled 1
+        option reset_module '1'
+        option usb_port '/sys/devices/platform/101c0000.ehci/usb1/1-2'

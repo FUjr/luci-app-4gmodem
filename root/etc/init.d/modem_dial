@@ -1,0 +1,91 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+STOP=16
+USE_PROCD=1
+
+service_triggers() {
+    procd_add_reload_trigger "4gmodem"
+}
+
+
+
+dial(){
+    config=$1
+    vendor=$(/usr/libexec/modem/get_vendor $config)
+    if [ -e /dev/cdc-wdm0 ];then
+        source /usr/libexec/dial/quectel_CM
+        logger -t 4gmodem "dial qmi device $vendor"
+    else
+        case "$vendor" in
+        "LONGSUNG")
+            cdc=$(lsusb -t | grep "Driver=cdc_ether")
+            if [ -n "$cdc" ]; then
+                logger -t 4gmodem "dial cdc device"
+                source /usr/libexec/dial/ls_cdc_dial
+            fi
+            ;;
+        "Fibocom")
+            gl_modem /dev/ttyUSB2 'AT+GTUSBMODE=17'
+            sleep 5 #等待模组启动
+            /etc/init.d/modem_load_drv stop
+            /etc/init.d/modem_load_drv start
+            source /usr/libexec/dial/quectel_CM
+            ;;
+        *)
+            logger -t 4gmodem "modem not support"
+            ;;
+        esac
+    fi
+    local enabled
+    config_get_bool enabled $config enabled
+    if [ "$enabled" = "1" ]; then
+        connect $config
+    else
+        disconnect $config
+    fi
+}
+
+connect(){
+    modem_dial $config
+}
+
+disconnect(){
+    modem_stop $config
+}
+
+
+start_service() {
+    #等待模组启动，最多5秒
+    for i in $(seq 1 5); do
+        if [ -e /dev/ttyUSB0 ]; then
+            break
+        elif [ -e /dev/cdc-wdm0 ]; then
+            break
+        else
+            logger -t 4gmodem "wait modem start $i"
+            sleep 1
+        fi
+    done
+    config_load 4gmodem
+    config_foreach dial modem
+}
+
+stop_service() {
+    config_load 4gmodem
+    config_foreach force_stop modem
+}
+
+force_stop(){
+    config=$1
+    vendor=$(/usr/libexec/modem/get_vendor $config)
+    case "$vendor" in
+    "LONGSUNG")
+        source /usr/libexec/dial/ls_cdc_dial
+        modem_stop
+        ;;
+    *)
+        killall -9 quectel-CM
+        ;;
+    esac
+}

@@ -1,0 +1,30 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    logger -t modem_led "start modem_led"
+    start_led
+}
+
+start_led() {
+    procd_open_instance
+    procd_set_param command /usr/bin/modem_leds
+    procd_set_param respawn
+    procd_close_instance
+}
+
+stop() {
+    procd_close_instance
+}
+
+start() {
+    start_led
+}
+
+reload_service() {
+    stop
+    start
+}

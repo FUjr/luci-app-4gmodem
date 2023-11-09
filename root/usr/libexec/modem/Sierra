@@ -1,0 +1,309 @@
+#查询信息强度
+All_CSQ()
+{   
+    
+    Debug "All_CSQ"
+	#信号
+	CSQ=$(gl_modem $ATPORT "AT+CSQ")
+    CSQ=$(echo $CSQ | grep -i -o "+CSQ: [0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+	if [ "$CSQ" = "99" ]; then
+		json_init
+        json_add_int CSQ 0
+        json_add_string CSQ_PER "0%"
+        json_add_string CSQ_RSSI "0 dBm"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	else
+		CSQ_PER=$(($CSQ * 100/31))"%"
+		CSQ_RSSI=$((2 * CSQ - 113))" dBm"
+        json_init
+        json_add_int CSQ "$CSQ"
+        json_add_string CSQ_PER "$CSQ_PER"
+        json_add_string CSQ_RSSI "$CSQ_RSSI"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	fi
+}
+
+#获取sim信息，理想状态下可以获取是否插入、imsi、iccid
+Vendor_SIMINFO()
+{
+    Debug "Vendor_SIMINFO"
+    
+    READY=$(gl_modem $ATPORT "AT+CPIN?" | grep -o "+CPIN: READY" |wc -l)
+    ICCID=$( gl_modem $ATPORT "AT!ICCID?" | grep -i "ICCID:" | cut -d ":" -f 2 | sed 's/ //g' )
+    if [ -n "$ICCID" ];then
+        READY=1
+    fi
+    IMEI=$(gl_modem $ATPORT "ATI" | grep -o "IMEI: [0-9]\{15\}" |grep -o "[0-9]\{15\}")
+    json_init
+    json_add_string IMEI "$IMEI"
+    if [ "$READY" = "1" ]; then
+        # 获取IMSI
+        IMSI=$( gl_modem $ATPORT "AT+CIMI"  | grep -o "[0-9]\{15\}"  )
+	    # 获取ICCID
+	    
+        Phone=$( gl_modem $ATPORT "AT+CNUM"  | grep "+CNUM:" |grep -o "[0-9]\{11,\}"  )
+        json_add_string SIM_READY "Yes"
+        json_add_string IMSI "$IMSI"
+        json_add_string ICCID "$ICCID"
+        json_add_string Phone "$Phone"
+        
+    else
+        json_add_string SIM_READY "No"
+    fi
+    json_close_object
+    SIM_INFO=`json_dump`
+
+}
+
+Vendor_ModuleInfo(){
+    gl_modem $ATPORT "ATI" > /tmp/ati_${cfg}
+    IMEI=$(gl_modem $ATPORT "ATI" | grep -o "IMEI: [0-9]\{15\}" |grep -o "[0-9]\{15\}")
+    Model=$( cat /tmp/ati_${cfg}  | grep 'Model:' |cut -d: -f2)
+    Manufacturer=$( cat /tmp/ati_${cfg}  | grep 'Manufacturer:' |cut -d: -f2 )
+    json_init
+    json_add_string Model "$Model"
+    json_add_string Manufacturer "$Manufacturer"
+    json_add_string IMEI "$IMEI"
+    json_close_object
+    MODULE_INFO=`json_dump`
+}
+
+Vendor_Cellinfo()
+{
+    RAT=$(gl_modem $ATPORT "AT!GETRAT?" | grep -i "!GETRAT:" | cut -d ":" -f 2 | sed 's/ //g')
+    BAND=$(gl_modem $ATPORT "AT!GETBAND?" | grep -i "GETBAND:" | cut -d ":" -f 2 | sed 's/ //g')
+    json_init
+    json_add_string RAT "$RAT"
+    json_add_string BAND "$BAND"
+    json_close_object
+    CELL_INFO=`json_dump`
+}
+
+Vendor_Lock_Band()
+{   
+    gl_modem $ATPORT "AT!ENTERCND=\"A710\"" > /dev/null
+
+
+}
+
+Vendor_Lock_RAT(){
+    gl_modem $ATPORT "AT!ENTERCND=\"A710\"" > /dev/null
+}
+
+Vendor_Get_Lock_Band()
+{
+    gl_modem $ATPORT "AT!ENTERCND=\"A710\"" > /dev/null
+    rat=$(gl_modem $ATPORT "AT!SELRAT?" | grep -i "!SELRAT:" | grep -o "[0-9]\{1,2\}")
+    band=$(gl_modem $ATPORT "AT!BAND?" | grep -i "BAND:" | cut -d ":" -f 2 | sed 's/ //g')
+#bandlist
+#  0 CDMA 22 WCDMA_800 42 LTE_B4 60 LTE_B24
+#  2 Sleep 25 WCDMA_BC3 43 LTE_B2 61 LTE_B25
+#  5 CDMA_800 26 CDMA_BC14 44 LTE_B3 62 LTE_B26
+#  6 CDMA_1900 27 CDMA_BC11 45 LTE_B5 63 LTE_B27
+#  7 HDR 28 WCDMA_BC4 46 LTE_B6 64 LTE_B28
+#  8 CDMA_1800 29 WCDMA_BC8 47 LTE_B8 65 LTE_B29
+#  9 WCDMA_IMT 30 MF 700 48 LTE_B9 66 LTE_B30
+#  10 GSM_900 31 WCDMA_BC9 49 LTE_B10 67 LTE_B31
+#  11 GSM_1800 32 CDMA_BC15 50 LTE_B12 68 LTE_B32
+#  12 GSM_1900 33 CDMA_BC10 51 LTE_B14 69 LTE_B33
+#  14 JCDMA 34 LTE_B1 52 LTE_B15 70 LTE_B34
+#  15 WCDMA_1900A 35 LTE_B7 53 LTE_B16 71 LTE_B35
+#  16 WCDMA_1900B 36 LTE_B13 54 LTE_B18 72 LTE_B36
+#  17 CDMA_450 37 LTE_B17 55 LTE_B19 73 LTE_B37
+#  18 GSM_850 38 LTE_B38 56 LTE_B20 74 LTE_B39
+#  19 IMT 39 LTE_B40 57 LTE_B21 75 WCDMA_BC19
+#  20 HDR_800 40 WCDMA_BC11 58 LTE_B22 76 LTE_B41
+#  21 HDR_1900 41 LTE_B11 59 LTE_B23
+    json_init
+    json_add_string current_rat "Not support"
+    json_add_object AllowedBand
+    # json_add_string "CDMA_22" "0"
+    # json_add_string "sleep" "2"
+    # json_add_string "CDMA_800" "5"
+    # json_add_string "CDMA_1900" "6"
+    # json_add_string "HDR_28" "7"
+    # json_add_string "CDMA_1800" "8"
+    # json_add_string "WCDMA_IMT" "9"
+    # json_add_string "GSM_900" "10"
+    # json_add_string "GSM_1800" "11"
+    # json_add_string "GSM_1900" "12"
+    # json_add_string "JCDMA" "14"
+    # json_add_string "WCDMA_1900A" "15"
+    # json_add_string "WCDMA_1900B" "16"
+    # json_add_string "CDMA_450" "17"
+    # json_add_string "GSM_850" "18"
+    # json_add_string "IMT" "19"
+    # json_add_string "HDR_800" "20"
+    # json_add_string "HDR_1900" "21"
+    # json_add_string "WCDMA_800" "22"
+    # json_add_string "WCDMA_BC3" "25"
+    # json_add_string "CDMA_BC14" "26"
+    # json_add_string "CDMA_BC11" "27"
+    # json_add_string "WCDMA_BC4" "28"
+    # json_add_string "WCDMA_BC8" "29"
+    # json_add_string "WCDMA_BC9" "31"
+    # json_add_string "CDMA_BC15" "32"
+    # json_add_string "CDMA_BC10" "33"
+    # json_add_string "LTE_B1" "34"
+    # json_add_string "LTE_B7" "35"
+    # json_add_string "LTE_B13" "36"
+    # json_add_string "LTE_B17" "37"
+    # json_add_string "LTE_B38" "38"
+    # json_add_string "LTE_B40" "39"
+    # json_add_string "WCDMA_BC11" "40"
+    # json_add_string "LTE_B11" "41"
+    # json_add_string "LTE_B4" "42"
+    # json_add_string "LTE_B2" "43"
+    # json_add_string "LTE_B3" "44"
+    # json_add_string "LTE_B5" "45"
+    # json_add_string "LTE_B6" "46"
+    # json_add_string "LTE_B8" "47"
+    # json_add_string "LTE_B9" "48"
+    # json_add_string "LTE_B10" "49"
+    # json_add_string "LTE_B12" "50"
+    # json_add_string "LTE_B14" "51"
+    # json_add_string "LTE_B15" "52"
+    # json_add_string "LTE_B16" "53"
+    # json_add_string "LTE_B18" "54"
+    # json_add_string "LTE_B19" "55"
+    # json_add_string "LTE_B20" "56"
+    # json_add_string "LTE_B21" "57"
+    # json_add_string "LTE_B22" "58"
+    # json_add_string "LTE_B23" "59"
+    # json_add_string "LTE_B24" "60"
+    # json_add_string "LTE_B25" "61"
+    # json_add_string "LTE_B26" "62"
+    # json_add_string "LTE_B27" "63"
+    # json_add_string "LTE_B28" "64"
+    # json_add_string "LTE_B29" "65"
+    # json_add_string "LTE_B30" "66"
+    # json_add_string "LTE_B31" "67"
+    # json_add_string "LTE_B32" "68"
+    # json_add_string "LTE_B33" "69"
+    # json_add_string "LTE_B34" "70"
+    # json_add_string "LTE_B35" "71"
+    # json_add_string "LTE_B36" "72"
+    # json_add_string "LTE_B37" "73"
+    # json_add_string "LTE_B39" "74"
+    # json_add_string "WCDMA_BC19" "75"
+    # json_add_string "LTE_B41" "76"
+    json_close_object
+    json_add_object "RAT_Mode"
+    json_add_string "" 'Not support'
+    json_close_object
+    json_add_array "band_list"
+    json_add_string "" 'Not support'
+    json_close_array
+    json_close_object
+    LOCK_BAND=`json_dump`
+}
+
+Vendor_reset_module()
+{
+    gl_modem $ATPORT "AT+CFUN=0" 2>&1 > /dev/null
+    sleep 2
+    gl_modem $ATPORT "AT+CFUN=1" 2>&1 > /dev/null
+    sleep 2
+    gl_modem $ATPORT "AT!RESET" 2>&1 > /dev/null
+    sleep 2
+    Vendor_clear_cache
+    vendor_redial
+}
+
+Vendor_reboot_module(){
+    gl_modem $ATPORT "AT+CFUN=0" 2>&1 > /dev/null
+    sleep 2
+    gl_modem $ATPORT "AT+CFUN=1" 2>&1 > /dev/null
+    sleep 2
+    Vendor_clear_cache
+}
+
+Vendor_clear_cache(){
+    rm -rf /tmp/cpe_*
+    rm -rf /tmp/vendor
+}
+
+vendor_redial(){
+    #重新检查驱动并拨号
+    /etc/init.d/modem_load_drv stop
+    /etc/init.d/modem_load_drv start
+    Vendor_clear_cache
+    /etc/init.d/modem_dial stop
+    /etc/init.d/modem_dial start
+}
+
+Vendor_get_func(){
+    json_init
+    json_add_string "Vendor" "Sierra"
+    json_add_object "func"
+    json_add_string "reset_module" "reset_module"
+    json_add_string "clear_cache" "clear_cache"
+    json_add_string "redial" "redial"
+    json_close_object
+    json_close_object
+    FUNC=`json_dump`
+}
+
+Vendor_run_func(){
+    func=$arg1
+    case $func in
+        "reset_module")
+            Vendor_reset_module
+            ;;
+        "reboot_module")
+            Vendor_reboot_module
+            ;;
+        "clear_cache")
+            Vendor_clear_cache
+            ;;
+        "redial")
+            vendor_redial
+            ;;
+        "boot")
+            Vendor_reset_module
+            ;;
+        *)
+            echo "Unknown func $func"
+            ;;
+    esac
+    echo "Done"
+}
+
+convert2band()
+{
+    hex_band=$1
+    hex=$(echo $hex_band | grep -o "[0-9A-F]\{1,12\}")
+    if [ -z "$hex" ]; then
+        echo Invalid band
+        retrun
+    fi
+    band_list=""
+    bin=$(echo "ibase=16;obase=2;$hex" | bc)
+    len=${#bin}
+    for i in $(seq 1 ${#bin}); do
+        if [ ${bin:$i-1:1} = "1" ]; then
+            band_list=$band_list"\n"$((len - i + 1))
+        fi
+    done
+    echo -e $band_list | sort -n | tr '\n' ' '
+}
+
+convert2hex()
+{
+    band_list=$1
+    #splite band_list
+    band_list=$(echo $band_list | tr ',' '\n' | sort -n | uniq)
+    hex="0"
+    for band in $band_list; do
+        add_hex=$(echo "obase=16;2^($band - 1 )" | bc)
+        hex=$(echo "obase=16;ibase=16;$hex + $add_hex" | bc)
+    done
+    if [ -n $hex ]; then
+        echo $hex
+    else
+        echo Invalid band
+        retrun
+    fi
+}

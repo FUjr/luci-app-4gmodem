@@ -1,0 +1,47 @@
+#!/bin/sh
+[ "$ACTION" = add -a "$DEVTYPE" = usb_device ] || exit 0
+vid=$(cat /sys$DEVPATH/idVendor)
+pid=$(cat /sys$DEVPATH/idProduct)
+case $vid in
+    '1508')
+        #Fibocom
+        vendor="Fibocom"
+        ;;
+    '1c9e')
+        #LONGSUNG
+        vendor="LONGSUNG"
+        ;;
+    '2c7c')
+        #Quectel
+        vendor="Quectel"
+        ;;
+    '05c6')
+        #Godwin or Quectel
+        case $pid in
+            '9215')
+                #Quectel
+                vendor="Quectel"
+                ;;
+            '9091')
+                #Godwin
+                vendor="Godwin"
+                ;;
+            *)
+                exit 0
+                ;;
+        esac
+        ;;
+    '1199')
+        #Sierra
+        vendor="Sierra"
+        ;;
+    *)
+        exit 0
+        ;;
+
+esac
+logger -t 4gmodem "hotplug modem"
+/etc/init.d/modem_load_drv stop
+/etc/init.d/modem_load_drv start
+/etc/init.d/modem_dial stop
+/etc/init.d/modem_dial start
