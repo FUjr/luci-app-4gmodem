@@ -1,0 +1,65 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+STOP=16
+USE_PROCD=1
+
+start_service(){
+    logger -t 4gmodem "modem_lockband"
+    config_load 4gmodem
+    config_foreach lockband modem
+}
+
+wait_tty(){
+    timeout=$1
+    while [ $timeout -gt 0 ]
+    do
+        res=$(gl_modem $ATPORT "ATI")
+        if [ -n "$res" ];then
+            break
+        fi
+        sleep 1
+        timeout=$(($timeout-1))
+    done
+}
+
+lockband(){
+    local band
+    local rat
+    config_get lockband $1 lockband
+    config_get lockrat $1 lockrat
+    config_get ATPORT $1 at_port
+    source /usr/libexec/modem/get_vendor $1
+    logger -t 4gmodem "modem_lockband $vendor $lockband $lockrat"
+    case "$vendor" in
+        "LONGSUNG")
+            wait_tty 10
+            if [ "$lockrat" -eq 5 ] && [ -n "$lockband" ];then
+                LCTMOBAPREF=$(gl_modem ${ATPORT} "AT+LCTMOBAPREF?")
+                mode_pref=$(echo $LCTMOBAPREF | sed 's/\r/\n/g' | grep -o "+MODEPREF:[0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+                band_pref=$(echo $LCTMOBAPREF | sed 's/\r/\n/g' | grep -o "+BANDPREF:[0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+                current_lockband="${mode_pref},${band_pref}"
+                if [ "$current_lockband" != "$lockband" ];then
+                    logger -t 4gmodem "LONGSUNG lockband $lockband"
+                    gl_modem ${ATPORT} "AT+LCTMOBAPREF=${lockband}" 2>&1 > /dev/null
+                fi
+            fi
+        ;;
+        # "NEOWAY")
+        #     wait_tty 10
+        #     current_lockband=$(gl_modem $ATPORT "AT+BANDLOCK?"  | grep "+BANDLOCK:" | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+        #     NETINFO=$(gl_modem $ATPORT "AT\$MYNETINFO?" | grep -o "MYNETINFO: [0-9]\{1\}" | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+        #     if [ -n "$lockband" ] && [ "$lockband" != "NONE" ] && [ -n "$current_lockband" ] && [ "$current_lockband" != "$lockband" ] ;then
+        #         logger -t 4gmodem "NEOWAY lockband $lockband"
+        #         gl_modem ${ATPORT} "AT+BANDLOCK=${lockband}" 2>&1 > /dev/null
+        #     fi
+        #     if [ -n "$lockrat" ] && [ "$NETINFO" != "$lockrat" ] ;then
+        #         logger -t 4gmodem "NEOWAY lockrat $lockrat"
+        #         gl_modem ${ATPORT} "AT\$MYNETINFO=${lockrat}" 2>&1 > /dev/null
+        #     fi
+        # ;;
+        *)
+            logger -t 4gmodem "modem don't need lockband in startup"
+        ;;
+    esac
+}
