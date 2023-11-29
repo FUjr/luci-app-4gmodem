@@ -12,7 +12,7 @@ service_triggers() {
 
 dial(){
     config=$1
-    vendor=$(/usr/libexec/modem/get_vendor $config)
+    source /usr/libexec/modem/get_vendor $config
     if [ -e /dev/cdc-wdm0 ];then
         source /usr/libexec/dial/quectel_CM
         logger -t 4gmodem "dial qmi device $vendor"
@@ -30,6 +30,24 @@ dial(){
             sleep 5 #等待模组启动
             /etc/init.d/modem_load_drv stop
             /etc/init.d/modem_load_drv start
+            source /usr/libexec/dial/quectel_CM
+            ;;
+        "NEOWAY")
+            if [ -z "$ecm" ];then
+                gl_modem $(uci -q get 4gmodem.${config}.at_port) 'AT+NETSHAREMODE=2'
+                exit
+            fi
+            source /usr/libexec/dial/quectel_CM
+            ;;
+        "Gosuncn")
+            sleep 3
+            #等待模组启动
+            zswitch=$(gl_modem /dev/ttyUSB2 'AT+ZSWITCH?' |grep -i '+ZSWITCH: x')
+            if [ -z "$zswitch" ]; then
+                gl_modem /dev/ttyUSB2 'AT+ZSWITCH=x'
+                gl_modem /dev/ttyUSB2 'AT+CFUN=1,1'
+                exit
+            fi
             source /usr/libexec/dial/quectel_CM
             ;;
         *)
