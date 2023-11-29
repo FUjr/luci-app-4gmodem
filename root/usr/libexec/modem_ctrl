@@ -131,7 +131,7 @@ case $1 in
         run_func
         ;;
     *)
-        echo "Usage: $0 {read_info|set_imei|lock_band|update_csq|update_cell_info|update_sim_info|update_module_info|update_lock_band_info|update_all|reset|GetFunc|run_func}"
+        echo "Usage: $0 {read_info|set_imei|lock_band|lock_rat|Signal|CellInfo|SIM|Module|LockBand|update_all|reset|GetFunc|run_func}"
         exit 1
         ;;
 esac
