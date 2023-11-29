@@ -10,6 +10,11 @@ case $vid in
     '1c9e')
         #LONGSUNG
         vendor="LONGSUNG"
+        /etc/init.d/modem_lockband start
+        ;;
+    '2020')
+        #BroadMobi
+        vendor="BroadMobi"
         ;;
     '2c7c')
         #Quectel
@@ -21,6 +26,10 @@ case $vid in
             '9215')
                 #Quectel
                 vendor="Quectel"
+                ;;
+            '9216')
+                #NEOWAY N720 V001
+                vendor="NEOWAY"
                 ;;
             '9091')
                 #Godwin
@@ -34,6 +43,14 @@ case $vid in
     '1199')
         #Sierra
         vendor="Sierra"
+        ;;
+    '19d2')
+        #Gosuncn
+        vendor="Gosuncn"
+        ;;
+    '2949')
+        #NEOWAY
+        vendor="NEOWAY"
         ;;
     *)
         exit 0
