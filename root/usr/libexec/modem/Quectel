@@ -79,6 +79,7 @@ Vendor_ModuleInfo(){
     Revision=$( cat /tmp/ati_${cfg}  | grep 'Revision:' |cut -d: -f2 )
     json_init
     json_add_string Model "$Model"
+    json_add_boolean Modify_IMEI 1
     json_add_string Manufacturer "$Manufacturer"
     json_add_string IMEI "$IMEI"
     json_add_string Revision "$Revision"
