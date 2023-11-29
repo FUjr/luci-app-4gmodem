@@ -188,7 +188,7 @@ Vendor_Get_Lock_Band()
         json_add_string "LTE_B01" "5,5"
         json_add_string "LTE_B03" "5,6"
         json_add_string "LTE_B05" "5,8"
-        json_add_string "LTE_B08" "5,1"
+        json_add_string "LTE_B07" "5,1"
         json_add_string "LTE_B38" "5,2"
         json_add_string "LTE_B39" "5,3"
         json_add_string "LTE_B40" "5,4"
@@ -210,12 +210,16 @@ Vendor_Get_Lock_Band()
 
 Vendor_Lock_RAT(){
     rat=$arg1
+    uci set 4gmodem.${cfg}.lockrat=$rat
     gl_modem $ATPORT "AT+MODODR=$rat" 2>&1 > /dev/null
 
 }
 Vendor_Lock_Band()
 {   
     lock_cfg=$arg1
+    uci set 4gmodem.${cfg}.lockband=$lock_cfg
+    uci set 4gmodem.${cfg}.lockrat=5
+    uci commit 4gmodem
     gl_modem ${ATPORT} "AT+LCTMOBAPREF=${lock_cfg}" 2>&1 > /dev/null
 }
 
@@ -226,7 +230,7 @@ Vendor_reset_module(){
 }
 
 Vendor_reboot_module(){
-    gl_modem $ATPORT "AT+CFUN=6" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT+CFUN=1,1" 2>&1 > /dev/null
     Vendor_clear_cache
 }
 
