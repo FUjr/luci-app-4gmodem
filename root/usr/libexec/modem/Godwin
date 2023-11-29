@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/shEFS_SVN
 source /usr/share/libubox/jshn.sh 
-
+EFS_SVN=$(gl_modem $ATPORT "ATI" | grep "EFS_SVN:" | cut -d: -f2)
 lte_bw() {
 	BW=$(echo $1 | grep -o "[0-5]\{1\}")
 	case $BW in
@@ -79,6 +79,7 @@ Vendor_ModuleInfo(){
     Revision=$( cat /tmp/ati_${cfg}  | grep 'Revision:' |cut -d: -f2 )
     json_init
     json_add_string Model "$Model"
+    json_add_boolean Modify_IMEI 1
     json_add_string Manufacturer Godwin
     json_add_string IMEI "$IMEI"
     json_add_string Revision "$Revision"
@@ -171,23 +172,47 @@ Vendor_Get_Lock_Band()
     LowBand=$(echo "$modem_info" | grep '+BANDCFG:3,' | awk -F, '{print $2}' )
     HighBand=$(echo "$modem_info" | grep '+BANDCFG:3,' | awk -F, '{print $3}' )
     LOCK_BAND=$(convert2band $LowBand $HighBand)
+    TD5=$(echo $EFS_SVN | grep -o "TD5")
     if [ -z "$LOCK_BAND" ]; then
         LOCK_BAND="Unknown"
     fi
     json_init
     json_add_string current_rat "${current_rat}"
     json_add_object AllowedBand
-    json_add_string "B01" "1"
-    json_add_string "B03" "3"
-    json_add_string "B05" "5"
-    json_add_string "B07" "7"
-    json_add_string "B08" "8"
-    json_add_string "B20" "20"
-    json_add_string "B34" "34"
-    json_add_string "B38" "38"
-    json_add_string "B39" "39"
-    json_add_string "B40" "40"
-    json_add_string "B41" "41"
+    #TD5版本FDD-LTE B1/B2/B3/B4/B5/B7/B8/B12/B17/B20/B25/B26/B28/B66
+    # TDD-LTE B34/B38/B39/B40/B41
+    if [ -n "$TD5" ];then
+        json_add_string B01 "1"
+        json_add_string B02 "2"
+        json_add_string B03 "3"
+        json_add_string B04 "4"
+        json_add_string B05 "5"
+        json_add_string B07 "7"
+        json_add_string B08 "8"
+        json_add_string B12 "12"
+        json_add_string B17 "17"
+        json_add_string B20 "20"
+        json_add_string B25 "25"
+        json_add_string B26 "26"
+        json_add_string B28 "28"
+        json_add_string B34 "34"
+        json_add_string B38 "38"
+        json_add_string B39 "39"
+        json_add_string B40 "40"
+        json_add_string B41 "41"
+    else
+        json_add_string "B01" "1"
+        json_add_string "B03" "3"
+        json_add_string "B05" "5"
+        json_add_string "B07" "7"
+        json_add_string "B08" "8"
+        json_add_string "B20" "20"
+        json_add_string "B34" "34"
+        json_add_string "B38" "38"
+        json_add_string "B39" "39"
+        json_add_string "B40" "40"
+        json_add_string "B41" "41"
+    fi
     json_close_object
     json_add_object "RAT_Mode"
     json_add_string "Auto" "2"

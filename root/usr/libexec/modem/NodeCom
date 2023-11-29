@@ -1,0 +1,367 @@
+#!/bin/sh
+source /usr/share/libubox/jshn.sh 
+lte_bw() {
+	BW=$(echo $1 | grep -o "[0-5]\{1\}")
+	case $BW in
+		"0")
+			BW="1.4" ;;
+		"1")
+			BW="3" ;;
+		"2"|"3"|"4"|"5")
+			BW=$((($(echo $BW) - 1) * 5)) ;;
+	esac
+    echo "$BW MHz"
+}
+
+band_translate() {
+# -1 BAND_CLASS_NONE
+#  0 BAND_BC0
+#  43 BAND_GSM_850
+#  44 BAND_GSM_EGSM_900
+#  45 BAND_GSM_PGSM_900
+#  47 BAND_GSM_DCS_1800
+#  48 BAND_GSM_PCS_1900
+#  80 BAND_WCDMA_I_IMT_2000
+#  82 BAND_WCDMA_III_1700
+#  84 BAND_WCDMA_V_850
+#  120 LTE_EUTRAN_BAND1
+#  122 LTE_EUTRAN_BAND3
+#  124 LTE_EUTRAN_BAND5
+#  127 LTE_EUTRAN_BAND8
+#  139 LTE_EUTRAN_BAND20
+#  157 BAND_LTE_EUTRAN_BAND38
+#  156 BAND_LTE_EUTRAN_BAND39
+#  159 BAND_LTE_EUTRAN_BAND40
+#  160 BAND_LTE_EUTRAN_BAND41
+#  163 BAND_TDS_BANDA
+#  168 BAND_TDS_BANDF
+band=$1
+case $band in
+    -1)
+        lband="BAND_CLASS_NONE"
+        ;;
+    0)
+        lband="BAND_BC0"
+        ;;
+    43)
+        lband="BAND_GSM_850"
+        ;;
+    44)
+        lband="BAND_GSM_EGSM_900"
+        ;;
+    45)
+        lband="BAND_GSM_PGSM_900"
+        ;;
+    47)
+        lband="BAND_GSM_DCS_1800"
+        ;;
+    48)
+        lband="BAND_GSM_PCS_1900"
+        ;;
+    80)
+        lband="BAND_WCDMA_I_IMT_2000"
+        ;;
+    82)
+        lband="BAND_WCDMA_III_1700"
+        ;;
+    84)
+        lband="BAND_WCDMA_V_850"
+        ;;
+    120)
+        lband="LTE_EUTRAN_BAND1"
+        ;;
+    122)
+        lband="LTE_EUTRAN_BAND3"
+        ;;
+    124)
+        lband="LTE_EUTRAN_BAND5"
+        ;;
+    127)
+        lband="LTE_EUTRAN_BAND8"
+        ;;
+    139)
+        lband="LTE_EUTRAN_BAND20"
+        ;;
+    157)
+        lband="BAND_LTE_EUTRAN_BAND38"
+        ;;
+    156)
+        lband="BAND_LTE_EUTRAN_BAND39"
+        ;;
+    159)
+        lband="BAND_LTE_EUTRAN_BAND40"
+        ;;
+    160)
+        lband="BAND_LTE_EUTRAN_BAND41"
+        ;;
+    163)
+        lband="BAND_TDS_BANDA"
+        ;;
+    168)
+        lband="BAND_TDS_BANDF"
+        ;;
+    *)
+        lband="Unknown"
+        ;;
+esac
+echo $lband
+}
+
+#查询信息强度
+#理想状态下可以获取信号强度、信号质量、信号百分比
+All_CSQ()
+{   
+    
+    Debug "All_CSQ"
+	#信号
+	CSQ=$(gl_modem $ATPORT "AT+CSQ")
+    CSQ=$(echo $CSQ | grep -i -o "+CSQ: [0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+	if [ "$CSQ" = "99" ]; then
+		json_init
+        json_add_int CSQ 0
+        json_add_string CSQ_PER "0%"
+        json_add_string CSQ_RSSI "0 dBm"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	else
+		CSQ_PER=$(($CSQ * 100/31))"%"
+		CSQ_RSSI=$((2 * CSQ - 113))" dBm"
+        json_init
+        json_add_int CSQ "$CSQ"
+        json_add_string CSQ_PER "$CSQ_PER"
+        json_add_string CSQ_RSSI "$CSQ_RSSI"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	fi
+}
+
+#获取sim信息，理想状态下可以获取是否插入、imsi、iccid
+Vendor_SIMINFO()
+{
+    Debug "Vendor_SIMINFO"
+    ATI=$(gl_modem ${ATPORT} "ATI")
+    READY=$(gl_modem $ATPORT "AT+CPIN?" | grep -o "+CPIN: READY" |wc -l)
+    IMEI=$(cat /tmp/ati_${cfg}  | grep 'IMEI:' |cut -d: -f2  |tr  -d '\r' |tr -d ' ')
+    json_init
+    json_add_string IMEI "$IMEI"
+    if [ "$READY" = "1" ]; then
+        # 获取IMSI
+        IMSI=$( gl_modem $ATPORT "AT+CIMI"  | sed -n '3p' | cut -d: -f2 )
+	    # 获取ICCID
+	    ICCID=$( gl_modem $ATPORT "AT+ICCID" | sed -n '3p' | awk -F ': ' '{print$2}' )
+        # 获取电话号码
+		phone=$( gl_modem $ATPORT "AT+CNUM"  | grep "+CNUM:" |grep -o "[0-9]\{9,\}"  )
+		json_add_string IMSI "$IMSI"
+		json_add_string ICCID "$ICCID"
+		json_add_string IMSI "$IMSI"
+		json_add_string phone "$phone"
+        json_add_string SIM_READY "Yes"
+    else
+        json_add_string SIM_READY "No"
+    fi
+    json_close_object
+    SIM_INFO=`json_dump`
+
+}
+
+Vendor_ModuleInfo(){
+    gl_modem $ATPORT "ATI" > /tmp/ati_${cfg}
+
+    Model=$( cat /tmp/ati_${cfg} | grep 'Model:' |cut -d: -f2 )
+    Manufacturer=$( cat /tmp/ati_${cfg}  | grep 'Manufacturer:' |cut -d: -f2 )
+    Temperature=$(gl_modem $ATPORT " "AT+MTSM=1"" | grep '+MTSM:' |cut -d: -f2)
+    IMEI=$(cat /tmp/ati_${cfg}  | grep 'IMEI:' |cut -d: -f2  |tr  -d '\r' |tr -d ' ')
+	json_init
+    json_add_string Model "$Model"
+    json_add_string Manufacturer "$Manufacturer"
+    json_add_string IMEI "$IMEI"
+    json_close_object
+    
+    MODULE_INFO=`json_dump`
+}
+
+
+Vendor_Cellinfo()
+{
+COPS0=$( gl_modem $ATPORT "AT+COPS=3,0;+COPS?" |grep '+COPS:')
+#返回示例 +COPS: 0,0,"CHN-UNICOM",7
+Carrier=$(echo $COPS0  | cut -d, -f3 | grep -o "[^\"]\+")
+RAT_num=$(echo $COPS0  | cut -d, -f4 | grep -o "[0-9]\{1\}")
+
+#获取当前无线接入技术
+# 0：GSM 
+# 1：GSM compact 
+# 2：UTRAN 
+# 3：GSM w/EGPRS 
+# 4：UTRAN w/HSDPA 
+# 5：UTRAN w/HSUPA 
+# 6：UTRAN w/HSDPA and HSUPA 
+# 7：E-UTRAN 
+# 9：CDMA
+#返回示例 +COPS: 0,0,"CHN-UNICOM",7
+
+case $RAT_num in
+    "0")
+        RAT="GSM"
+        ;;
+    "1")
+        RAT="GSM compact"
+        ;;
+    "2")
+        RAT="UTRAN"
+        ;;
+    "3")
+        RAT="GSM w/EGPRS"
+        ;;
+    "4")
+        RAT="UTRAN w/HSDPA"
+        ;;
+    "5")
+        RAT="UTRAN w/HSUPA"
+        ;;
+    "6")
+        RAT="UTRAN w/HSDPA and HSUPA"
+        ;;
+    "7")
+        RAT="LTE"
+        ;;
+    "9")
+        RAT="CDMA"
+        ;;
+    *)
+        RAT="Unknown"
+        ;;
+esac
+
+json_init
+json_add_string RAT "$RAT"
+json_add_string Carrier "$Carrier"
+for i in $(gl_modem $ATPORT "AT+SCELLINFO?" | tr ',' "\n" );do
+    #如果含有逗号，说明是单行
+    key=$(echo $i |cut -d: -f1|tr -d '\r')
+    value=$(echo $i |cut -d: -f2 |tr -d '\r')
+    #如果key位band或者BAND，需要转换为LBAND
+    if [ "$key" == 'BAND' ] ;then
+        key='LBAND'
+        value=$(band_translate $value)
+    fi
+    if [ "$key" != "$value" ] && [ -n "$value" ] && [ "$key" != '+SCELLINFO' ];then
+        json_add_string $key $value
+    fi
+done
+json_close_object
+CELL_INFO=`json_dump`
+}
+
+Vendor_Get_Lock_Band()
+{
+    BNDLOCK=$(gl_modem ${ATPORT} "AT+BNDLOCK?")
+    current_rat=$(gl_modem ${ATPORT} "AT+BNDLOCK?" |  grep -o "+BNDLOCK: [0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+    current_lockband=$(gl_modem ${ATPORT} "AT+BNDLOCK?" |  grep "+BNDLOCK:" | cut -d: -f2 | tr -d '\r ')
+    json_init
+    json_add_array "band_list"
+    json_add_string "" $current_lockband
+    json_close_array
+    json_add_string "current_rat" "$current_rat"
+    json_add_string Single_choice True
+    json_add_object AllowedBand
+    if [ "$current_rat" = 5 ]; then
+        json_add_string "LTE_Auto" "5,0"
+        json_add_string "LTE_B01" "5,1"
+        json_add_string "LTE_B03" "5,2"
+        json_add_string "LTE_B05" "5,9"
+        json_add_string "LTE_B08" "5,3"
+        json_add_string "LTE_B20" "5,4"
+        json_add_string "LTE_B38" "5,5"
+        json_add_string "LTE_B39" "5,6"
+        json_add_string "LTE_B40" "5,7"
+        json_add_string "LTE_B41" "5,8"
+    else
+        json_add_string "Lock band works in LTE only mode" "5,0"
+    fi
+    json_close_object
+    json_add_object "RAT_Mode"
+    json_add_string "WCDMA" "1"
+    json_add_string "Auto(LTE Preferred)" "2"
+    json_add_string "LTE Only" "5"
+    json_add_string "GSM Only" "3"
+    json_add_string "GSM Preferred" "4"
+    json_add_string "TDSCDMA Only" "6"
+    json_add_string "TDSCDMA_AND_WCDMA Only" "7"
+    json_close_object
+    LOCK_BAND=`json_dump`
+}
+
+
+Vendor_reboot_module(){
+    gl_modem $ATPORT "AT+CFUN=1,1" 2>&1 > /dev/null
+}
+
+Vendor_clear_cache(){
+    rm -rf /tmp/cpe_*
+    rm -rf /tmp/vendor
+}
+
+vendor_redial(){
+    #重新检查驱动并拨号
+    /etc/init.d/modem_load_drv stop
+    /etc/init.d/modem_load_drv start
+    Vendor_clear_cache
+    /etc/init.d/modem_dial stop
+    /etc/init.d/modem_dial start
+}
+
+Vendor_get_func(){
+    json_init
+    json_add_string "Vendor" "NodeCom"
+    json_add_object "func"
+    json_add_string "reset_module" "reset_module"
+    json_add_string "reboot_module" "reboot_module"
+    json_add_string "clear_cache" "clear_cache"
+    json_add_string "redial" "redial"
+    json_close_object
+    json_close_object
+    FUNC=`json_dump`
+}
+
+
+
+Vendor_run_func(){
+    func=$arg1
+    case $func in
+        "reset_module")
+            Vendor_reset_module
+            ;;
+        "reboot_module")
+            Vendor_reboot_module
+            ;;
+        "clear_cache")
+            Vendor_clear_cache
+            ;;
+        "redial")
+            vendor_redial
+            ;;
+        *)
+            echo "Unknown func $func"
+            ;;
+    esac
+    echo "Done"
+}
+
+
+Vendor_reset_module(){
+    gl_modem $ATPORT 'AT+BNDLOCK=5,0' 2>&1 > /dev/null
+    gl_modem $ATPORT "AT&F" 2>&1 > /dev/null
+    Vendor_clear_cache
+}
+
+Vendor_Lock_RAT(){
+    rat=$arg1
+    gl_modem $ATPORT "AT+BNDLOCK=$rat,0" 2>&1 > /dev/null
+
+}
+Vendor_Lock_Band()
+{   
+    lock_cfg=$arg1
+    gl_modem ${ATPORT} "AT+BNDLOCK=${lock_cfg}" 2>&1 > /dev/null
+}

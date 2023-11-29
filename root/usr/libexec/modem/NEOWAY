@@ -1,0 +1,401 @@
+#!/bin/sh
+source /usr/share/libubox/jshn.sh 
+lte_bw() {
+	BW=$(echo $1 | grep -o "[0-5]\{1\}")
+	case $BW in
+		"0")
+			BW="1.4" ;;
+		"1")
+			BW="3" ;;
+		"2"|"3"|"4"|"5")
+			BW=$((($(echo $BW) - 1) * 5)) ;;
+	esac
+    echo "$BW MHz"
+}
+
+earfcn_calculator() {
+#band freq(download) offset earfcn(download) freq(upload) offset earfcn
+# 1	2110	0	0–599	1920	18000	18000–18599
+# 2	1930	600	600−1199	1850	18600	18600–19199
+# 3	1805	1200	1200–1949	1710	19200	19200–19949
+# 4	2110	1950	1950–2399	1710	19950	19950–20399
+# 5	869	2400	2400–2649	824	20400	20400–20649
+# 6	875	2650	2650–2749	830	20650	20650–20749
+# 7	2620	2750	2750–3449	2500	20750	20750–21449
+# 8	925	3450	3450–3799	880	21450	21450–21799
+# 9	1844.9	3800	3800–4149	1749.9	21800	21800–22149
+# 10	2110	4150	4150–4749	1710	22150	22150–22749
+# 11	1475.9	4750	4750–4949	1427.9	22750	22750–22949
+# 12	729	5010	5010–5179	699	23010	23010–23179
+# 13	746	5180	5180–5279	777	23180	23180–23279
+# 14	758	5280	5280–5379	788	23280	23280–23379
+# …	 	 	 	 	 	 
+# 17	734	5730	5730–5849	704	23730	23730–23849
+# 18	860	5850	5850–5999	815	23850	23850–23999
+# 19	875	6000	6000–6149	830	24000	24000–24149
+# 20	791	6150	6150-6449	832	24150	24150-24449
+# 21	1495.9	6450	6450–6599	1447.9	24450	24450–24599
+# 24	1525	7700	7700–8039	1626.5	25700	25700–26039
+# …	 	 	 	 	 	 
+# 33	1900	36000	36000–36199	1900	36000	36000–36199
+# 34	2010	36200	36200–36349	2010	36200	36200–36349
+# 35	1850	36350	36350–36949	1850	36350	36350–36949
+# 36	1930	36950	36950–37549	1930	36950	36950–37549
+# 37	1910	37550	37550–37749	1910	37550	37550–37749
+# 38	2570	37750	37750–38249	2570	37750	37750–38249
+# 39	1880	38250	38250–38649	1880	38250	38250–38649
+# 40	2300	38650	38650–39649	2300	38650	38650–39649
+# 41	2496	39650	39650–41589	2496	39650	39650–41589
+# 42	3400	41590	41590–43589	3400	41590	41590–43589
+# 43	3600	43590	43590–45589	3600	43590	43590–45589
+earfcn=$1
+#根据earfcn换算出band,用正则匹配对应区间
+list_fdd="0 600 1200 1950 2400 2650 2750 3450 3800 4150 4750 5010 5180 5280 0 0 5730 5850 6000 6150 6450 7700 36000"
+list_tdd="36000 36200 36350 36950 37550 37750 38250 38650 39650 41590 43590 45590"
+if [ "$earfcn" -lt 36000 ];then
+    band=0
+    for i in $list_fdd;do
+        if [ "$earfcn" -lt "$i" ];then
+            break
+        fi
+        band=$(($band + 1))
+    done
+else  
+    band=32
+    for i in $list_tdd;do
+        if [ "$earfcn" -lt "$i" ];then
+            break
+        fi
+        band=$(($band + 1))
+    done
+fi
+echo $band
+}
+#查询信息强度
+#理想状态下可以获取信号强度、信号质量、信号百分比
+All_CSQ()
+{   
+    
+    Debug "All_CSQ"
+	#信号
+	CSQ=$(gl_modem $ATPORT "AT+CSQ")
+    CSQ=$(echo $CSQ | grep -i -o "+CSQ: [0-9]\{1,2\}" | grep -o "[0-9]\{1,2\}")
+	if [ "$CSQ" = "99" ]; then
+		json_init
+        json_add_int CSQ 0
+        json_add_string CSQ_PER "0%"
+        json_add_string CSQ_RSSI "0 dBm"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	else
+		CSQ_PER=$(($CSQ * 100/31))"%"
+		CSQ_RSSI=$((2 * CSQ - 113))" dBm"
+        json_init
+        json_add_int CSQ "$CSQ"
+        json_add_string CSQ_PER "$CSQ_PER"
+        json_add_string CSQ_RSSI "$CSQ_RSSI"
+        json_close_object
+        CSQ_INFO=`json_dump`
+	fi
+}
+
+#获取sim信息，理想状态下可以获取是否插入、imsi、iccid
+Vendor_SIMINFO()
+{
+    Debug "Vendor_SIMINFO"
+    ATI=$(gl_modem ${ATPORT} "ATI")
+    READY=$(gl_modem $ATPORT "AT+CPIN?" | grep -o "+CPIN: READY" |wc -l)
+    IMEI=$(gl_modem $ATPORT "AT+CGSN"  | grep 'CGSN:' |cut -d: -f2  |tr  -d '\r' |tr -d ' ')
+    json_init
+    json_add_string IMEI "$IMEI"
+    if [ "$READY" = "1" ]; then
+        # 获取IMSI
+        IMSI=$( gl_modem $ATPORT "AT+CIMI"  | sed -n '3p' | cut -d: -f2 )
+	    # 获取ICCID
+	    ICCID=$( gl_modem $ATPORT "AT+ICCID" | sed -n '3p' | awk -F ': ' '{print$2}' )
+        # 获取电话号码
+		phone=$( gl_modem $ATPORT "AT+CNUM"  | grep "+CNUM:" |grep -o "[0-9]\{9,\}"  )
+		json_add_string IMSI "$IMSI"
+		json_add_string ICCID "$ICCID"
+		json_add_string IMSI "$IMSI"
+		json_add_string phone "$phone"
+        json_add_string SIM_READY "Yes"
+    else
+        json_add_string SIM_READY "No"
+    fi
+    json_close_object
+    SIM_INFO=`json_dump`
+
+}
+
+Vendor_ModuleInfo(){
+    gl_modem $ATPORT "ATI" > /tmp/ati_${cfg}
+
+    Model=$( cat /tmp/ati_${cfg} | grep 'Model:' |cut -d: -f2 )
+    Manufacturer=$( cat /tmp/ati_${cfg}  | grep 'Manufacturer:' |cut -d: -f2 )
+    Temperature=$(gl_modem $ATPORT " "AT+MTSM=1"" | grep '+MTSM:' |cut -d: -f2)
+    IMEI=$(gl_modem $ATPORT "AT+CGSN"  | grep 'CGSN:' |cut -d: -f2  |tr  -d '\r' |tr -d ' ')
+	json_init
+    json_add_string Model "$Model"
+    json_add_string Manufacturer "$Manufacturer"
+    json_add_boolean Modify_IMEI 1
+    json_add_string IMEI "$IMEI"
+    json_close_object
+    
+    MODULE_INFO=`json_dump`
+}
+
+
+Vendor_Cellinfo()
+{
+COPS0=$( gl_modem $ATPORT "AT+COPS=3,0;+COPS?" |grep '+COPS:')
+#返回示例 +COPS: 0,0,"CHN-UNICOM",7
+Carrier=$(echo $COPS0  | cut -d, -f3 | grep -o "[^\"]\+")
+RAT_num=$(echo $COPS0  | cut -d, -f4 | grep -o "[0-9]\{1\}")
+# AT+NETMSG
+# +NETMSG: "460+01", 7594, 60C220B, 267, LTE BAND 3, 1650, -60, 199, "FDD LTE"
+# OK
+# +NETMSG: <MCC+MNC>, [<LAC>/<SID>/<TAC>], [<CELL_ID>/<NID>], 
+# [<BSIC>/<BID>/<Phy_cellid>], <BAND>, <ARFCN>, <RX_dBm>, <TX_dBm>, 
+# <net_mode>
+NETMSG=$(gl_modem $ATPORT "AT+NETMSG" | grep "+NETMSG:" |cut -d: -f2  |tr -d '\r')
+if [ -n "$NETMSG" ]; then
+    Carrier_MCC=$(echo $NETMSG | cut -d, -f1 | cut -d+ -f1 | grep -o "[0-9]\{3\}")
+    Carrier_MNC=$(echo $NETMSG | cut -d, -f1 | cut -d+ -f2 | grep -o "[0-9]\{2\}")
+    LAC=$(echo $NETMSG | cut -d, -f2 )
+    CellID=$(echo $NETMSG | cut -d, -f3 )
+    PCI=$(echo $NETMSG | cut -d, -f4 )
+    LBAND=$(echo $NETMSG | cut -d, -f5 )
+    RAT=$(echo $NETMSG | cut -d, -f9 | grep -o "[^\"]\+")
+    RX_dBm=$(echo $NETMSG | cut -d, -f7 )
+    TX_dBm=$(echo $NETMSG | cut -d, -f8 )
+else
+#获取当前无线接入技术
+# 0：GSM 
+# 1：GSM compact 
+# 2：UTRAN 
+# 3：GSM w/EGPRS 
+# 4：UTRAN w/HSDPA 
+# 5：UTRAN w/HSUPA 
+# 6：UTRAN w/HSDPA and HSUPA 
+# 7：E-UTRAN 
+# 9：CDMA
+#返回示例 +COPS: 0,0,"CHN-UNICOM",7
+
+case $RAT_num in
+    "0")
+        RAT="GSM"
+        ;;
+    "1")
+        RAT="GSM compact"
+        ;;
+    "2")
+        RAT="UTRAN"
+        ;;
+    "3")
+        RAT="GSM w/EGPRS"
+        ;;
+    "4")
+        RAT="UTRAN w/HSDPA"
+        ;;
+    "5")
+        RAT="UTRAN w/HSUPA"
+        ;;
+    "6")
+        RAT="UTRAN w/HSDPA and HSUPA"
+        ;;
+    "7")
+        RAT="LTE"
+        ;;
+    "9")
+        RAT="CDMA"
+        ;;
+    *)
+        RAT="Unknown"
+        ;;
+esac
+
+# 查询当前LAC和CELL_ID：$MYLACID 
+# 描述 查询当前LAC和CELL_ID 
+# 格式 AT$MYLACID<CR> 
+# 返回值 
+# <CR><LF>ERROR<CR><LF> 
+# <CR><LF>$MYLACID: <LAC>,<CELL_ID> 
+# <CR><LF>OK<CR><LF> 
+# 参数说明 
+# <LAC>：Location Area Code，位置区代码，16进制 
+# <CELL_ID>：CELL_ID，小区识别码，16进制
+
+    MYLACID=$(gl_modem $ATPORT 'AT$MYLACID' |grep '\$MYLACID: ' | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+    LAC=$(echo $MYLACID | cut -d, -f1)
+    CellID=$(echo $MYLACID | cut -d, -f2)
+# at$MYCGED
+# $MYCGED: 3740,-63,199
+# OK
+    MYCGED=$(gl_modem $ATPORT 'AT$MYCGED' |grep '\$MYCGED: ' | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+    Channel=$(echo $MYCGED | cut -d, -f1)
+    RX_dBm=$(echo $MYCGED | cut -d, -f2)
+    TX_dBm=$(echo $MYCGED | cut -d, -f3)
+    LBAND="LTE $(earfcn_calculator $Channel)"
+fi
+
+
+
+json_init
+json_add_string RAT "$RAT"
+json_add_string Carrier "$Carrier"
+json_add_string Carrier_MCC "$Carrier_MCC"
+json_add_string Carrier_MNC "$Carrier_MNC"
+json_add_string LAC "$LAC"
+json_add_string CellID "$CellID"
+json_add_string EARFCN "$EARFCN"
+json_add_string PCI "$PCI"
+json_add_string LBAND "$LBAND"
+json_add_string RX_dBm "$RX_dBm"
+json_add_string TX_dBm "$TX_dBm"
+json_close_object
+CELL_INFO=`json_dump`
+
+}
+
+
+
+Vendor_Get_Lock_Band()
+{
+
+#AT$MYNETINFO=?
+#<mode>：网络制式 
+# 1：AUTO 
+# 2：2G(包括GSM,EDGE,CDMA) 
+# 3：3G(包括WCDMA,TD-SCDMA,EVDO) 
+# 4：4G(包括FDD-LTE,TDD-LTE) 
+# 5：2G+3G(包括GSM,EDGE,CDMA,WCDMA,TD-SCDMA,EVDO) 
+# 6：2G+4G(包括GSM,EDGE,CDMA,FDD-LTE,TDD-LTE) 
+# 7：3G+4G(包括WCDMA,TD-SCDMA,EVDO,FDD-LTE,TDD-LTE)
+    NETINFO='1'
+    NETINFO=$(gl_modem $ATPORT "AT\$MYNETINFO?" | grep -o "MYNETINFO: [0-9]\{1\}" | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+    json_init
+    json_add_string current_rat "$NETINFO"
+    current_lockband=$(gl_modem $ATPORT "AT+BANDLOCK?"  | grep "+BANDLOCK:" | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+    if [ -n "$current_lockband" ]; then
+        json_add_string Single_choice True
+        json_add_object AllowedBand
+        allowoed_list=$(gl_modem $ATPORT "AT+BANDLOCK=?"  | grep "+BANDLOCK:" | cut -d: -f2 | tr -d ' ' |tr -d '\r')
+        if [ "$current_lockband" = "NONE" ]; then
+            current_lockband="AUTO"
+        fi
+        #返回时用逗号分隔的band列表
+        # AT+BANDLOCK=? 
+        # +BANDLOCK: 
+        # CDMA_BC0,GSM_900,GSM_1800,WCDMA_2100,WCDMA_900,TDSCDMA_B34,TDSCDMA_B39,LTE_B1,LTE_B3,LTE_B5,LTE_B8,LTE_B38,LTE_B39,LTE_B40,LTE_B41,AUTO
+        # OK
+        #遍历band列表
+        for band in $( echo $allowoed_list| tr ',' ' '  );do
+        json_add_string "$band" "$band"
+        done
+        json_close_object
+        json_add_array "band_list"
+        json_add_string "" $current_lockband
+        json_close_array
+    else
+        json_add_string Single_choice True
+        json_add_object AllowedBand
+        json_add_string "Lock band Not Supportsss" "NONE"
+        json_close_object
+    fi
+    json_add_object RAT_Mode
+    json_add_string "Auto" "1"
+    json_add_string "2G Only" "2"
+    json_add_string "3G Only" "3"
+    json_add_string "4G Only" "4"
+    json_add_string "2G+3G" "5"
+    json_add_string "2G+4G" "6"
+    json_add_string "3G+4G" "7"
+    json_close_object
+	LOCK_BAND=`json_dump`
+}
+
+Vendor_Lock_Band()
+{  
+    band=$arg1
+    gl_modem $ATPORT "AT+BANDLOCK=$band" 2>&1 > /dev/null
+	}
+
+Vendor_Lock_RAT(){
+    rat=$arg1
+    gl_modem $ATPORT "AT\$MYNETINFO=$rat" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT\$MYNETAUTO=0" 2>&1 > /dev/null
+}
+
+
+Vendor_reset_module(){
+    gl_modem $ATPORT "AT+BANDLOCK=AUTO" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT\$MYNETAUTO=0" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT\$MYNETINFO=4" 2>&1 > /dev/null
+    gl_modem $ATPORT "AT+CFUN=1,1" 2>&1 > /dev/null
+}
+
+Vendor_reboot_module(){
+    gl_modem $ATPORT "AT+CFUN=1,1" 2>&1 > /dev/null
+}
+
+Vendor_clear_cache(){
+    rm -rf /tmp/cpe_*
+    rm -rf /tmp/vendor
+}
+
+vendor_redial(){
+    #重新检查驱动并拨号
+    /etc/init.d/modem_load_drv stop
+    /etc/init.d/modem_load_drv start
+    Vendor_clear_cache
+    /etc/init.d/modem_dial stop
+    /etc/init.d/modem_dial start
+}
+
+Vendor_get_func(){
+    json_init
+    json_add_string "Vendor" "Fibocom"
+    json_add_object "func"
+    json_add_string "reset_module" "reset_module"
+    json_add_string "reboot_module" "reboot_module"
+    json_add_string "clear_cache" "clear_cache"
+    json_add_string "redial" "redial"
+    json_close_object
+    json_close_object
+    FUNC=`json_dump`
+}
+
+Vendor_Set_IMEI()
+{
+    imei=$2
+    if [ -z $imei ]; then
+        echo "Invalid IMEI"
+        retrun
+    fi
+    gl_modem $ATPORT "AT+IMEI=$imei"  2>&1 > /dev/null
+    echo "Set IMEI to $imei"
+}
+
+
+Vendor_run_func(){
+    func=$arg1
+    case $func in
+        "reset_module")
+            Vendor_reset_module
+            ;;
+        "reboot_module")
+            Vendor_reboot_module
+            ;;
+        "clear_cache")
+            Vendor_clear_cache
+            ;;
+        "redial")
+            vendor_redial
+            ;;
+        *)
+            echo "Unknown func $func"
+            ;;
+    esac
+    echo "Done"
+}

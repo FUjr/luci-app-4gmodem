@@ -24,9 +24,18 @@ idVendor=$(cat $usb_port/idVendor)
 tty_driver_name="option"
 case $idVendor in
     '1508')
-        #Fibocom
-        vendor="Fibocom"
-        tty_driver_if="2"
+        case $idProduct in
+            '1001')
+                #NodeCom
+                vendor="NodeCom"
+                tty_driver_if="2"
+            ;;
+            *)
+                #Fibocom
+                vendor="Fibocom"
+                tty_driver_if="2"
+            ;;
+        esac
         ;;
     '1c9e')
         #LONGSUNG
@@ -51,6 +60,11 @@ case $idVendor in
                 vendor="Godwin"
                 tty_driver_if="1"
                 ;;
+            '9216')
+                #NEOWAY N720 V001
+                vendor="NEOWAY"
+                tty_driver_if="1"
+                ;;
             *)
                 #Unknown
                 vendor="Unknown"
@@ -62,6 +76,37 @@ case $idVendor in
         #Sierra
         vendor="Sierra"
         tty_driver_if="3"
+        ;;
+    '19d2')
+        #Gosuncn
+        vendor="Gosuncn"
+        tty_driver_if="2"
+        ;;
+    '2020')
+        #BroadMobi
+        vendor="BroadMobi"
+        tty_driver_if="2"
+        ;;
+    '2949')
+        #NEOWAY
+        vendor="NEOWAY"
+        case $idProduct in
+            '8241')
+                #NEOWAY N720
+                tty_driver_if="4"
+                rndis="1"
+                ;;
+            '8243')
+                #NEOWAY N720
+                tty_driver_if="3"
+                ecm="1"
+                ;;
+            '8247')
+                #Unknown
+                tty_driver_if="2"
+                rmnet="1"
+                ;;
+        esac
         ;;
     *)
         #Unknown
