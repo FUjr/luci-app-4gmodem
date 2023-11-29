@@ -99,7 +99,9 @@ function generate_lockrat(rat_object,section){
 	parent_node.innerHTML = ''
 	Select = document.createElement('select')
 	Select.id = 'LockRAT_Select_' + section
-	for (var i in RAT_Mode){
+	rat_mode_key = Object.keys(RAT_Mode)
+	sorted_keys = rat_mode_key.sort()
+	for (i of sorted_keys){
 		new_option = document.createElement('option')
 		new_option.value = RAT_Mode[i]
 		new_option.innerHTML = i
@@ -173,6 +175,7 @@ XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>'
 		var LockedBand = LockBand['band_list'] ? LockBand['band_list'] : []
 		var AllowedBand = LockBand['AllowedBand'] ? LockBand['AllowedBand'] : ''
 		var Single_Choice = LockBand['Single_choice'] ? LockBand['Single_choice'] : false
+		var Modify_IMEI = Module['Modify_IMEI'] ? Module['Modify_IMEI'] : false
 		generate_lockrat(LockBand,'<%=section%>')
 		console.log(LockedBand)
 		if (LockBand['data_status'] == 'timeout'){
@@ -198,7 +201,7 @@ XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>'
 			LockedBand_node.innerHTML = LockedBand
 		} */
 		//如果不是移远，隐藏imei修改界面(字符串包含Quectel或Godwin)
-		if (Vendor.includes('Quectel') != true && Vendor.includes('Godwin') != true){
+		if (Modify_IMEI == false){
 			IMEI_SETTING_node = document.getElementById('IMEI_SETTING_<%=section%>')
 			if (IMEI_SETTING_node != null){
 				IMEI_SETTING_node.style.display = 'none'
@@ -212,7 +215,9 @@ XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>'
 		if (Single_Choice){
 			Select = document.createElement('select')
 			Select.id = 'LockBand_Select_<%=section%>'
-			for (var i in AllowedBand){
+			AllowedBand_keys = Object.keys(AllowedBand)
+			sorted_keys = AllowedBand_keys.sort()
+			for (i of sorted_keys){
 				new_option = document.createElement('option')
 				new_option.value = AllowedBand[i]
 				new_option.innerHTML = i
@@ -248,9 +253,10 @@ XHR.get('<%=luci.dispatcher.build_url("admin", "4gmodem", "get_modem_status")%>'
 			count = 0
 			//将json转化为数组
 			AllowedBand_keys = Object.keys(AllowedBand)
+			sorted_keys = AllowedBand_keys.sort()
 			//按照升序排列
 			checkbox_list = []
-			for ( key of AllowedBand_keys.sort() ){
+			for ( key of sorted_keys ){
 				value = AllowedBand[key]
 				new_checkbox = document.createElement('input')
 				new_checkbox.type = 'checkbox'
