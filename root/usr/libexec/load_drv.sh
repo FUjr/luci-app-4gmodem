@@ -16,6 +16,11 @@ driver_type(){
 
 
 load_tty_driver(){
+    #如果没有识别到tty驱动则退出
+    if [ "$vendor" == "Unknown" ] && [ -n "$vendor" ] ; then
+        logger -t 4gmodem "Unknown vendor"
+        exit
+    fi
     drv=$(driver_type $tty_driver_if)
     count=0
     while [ "$drv" != "$tty_driver_name" ] 
